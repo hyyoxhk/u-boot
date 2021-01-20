@@ -62,4 +62,12 @@ config USB_ETHER_SMSC95XX
 	  Say Y here if you would like to support SMSC LAN95xx based USB 2.0
 	  Ethernet Devices.
 
+config USB_ETHER_DM9601
+	bool "Davicom DM96xx based USB 10/100 ethernet devices"
+	depends on USB_HOST_ETHER
+	depends on DM_ETH
+	---help---
+	  This option adds support for Davicom DM9601/DM9620/DM9621A
+	  based USB 10/100 Ethernet adapters.
+
 endif
