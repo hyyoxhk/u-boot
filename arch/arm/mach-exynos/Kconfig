@@ -95,6 +95,9 @@ config TARGET_ODROID
 	bool "Exynos4412 Odroid board"
 	select MISC_COMMON
 
+config TARGET_ITOP
+	bool "Exynos4412 iTop-4412 board"
+
 endchoice
 endif
 
@@ -247,6 +250,7 @@ source "board/samsung/universal_c210/Kconfig"
 source "board/samsung/origen/Kconfig"
 source "board/samsung/trats2/Kconfig"
 source "board/samsung/odroid/Kconfig"
+source "board/samsung/itop/Kconfig"
 source "board/samsung/arndale/Kconfig"
 source "board/samsung/smdk5250/Kconfig"
 source "board/samsung/smdk5420/Kconfig"
