@@ -1,0 +1,6 @@
+ITOP BOARD
+M:	hyyoxhk@163.com
+S:	Maintained
+F:	board/samsung/itop/
+F:	include/configs/itop.h
+F:	configs/itop_defconfig
