@@ -12,6 +12,7 @@
 #include <pwm.h>
 #include <regmap.h>
 #include <syscon.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch-rockchip/pwm.h>
 #include <linux/bitops.h>
@@ -146,7 +147,7 @@ static int rk_pwm_probe(struct udevice *dev)
 	priv->data = (struct rockchip_pwm_data *)dev_get_driver_data(dev);
 
 	if (priv->data->supports_polarity)
-		priv->conf_polarity = PWM_DUTY_POSTIVE | PWM_INACTIVE_POSTIVE;
+		priv->conf_polarity = PWM_DUTY_POSTIVE | PWM_INACTIVE_NEGATIVE;
 
 	return 0;
 }

@@ -8,21 +8,26 @@
 #include <command.h>
 #include <cpu_func.h>
 #include <debug_uart.h>
+#include <dfu.h>
 #include <env.h>
 #include <env_internal.h>
 #include <init.h>
+#include <image.h>
+#include <lmb.h>
 #include <log.h>
 #include <net.h>
 #include <sata.h>
 #include <ahci.h>
 #include <scsi.h>
 #include <malloc.h>
+#include <memalign.h>
 #include <wdt.h>
 #include <asm/arch/clk.h>
 #include <asm/arch/hardware.h>
 #include <asm/arch/sys_proto.h>
 #include <asm/arch/psu_init_gpl.h>
 #include <asm/cache.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/ptrace.h>
 #include <dm/device.h>
@@ -64,6 +69,11 @@ static const struct {
 	u8 device;
 	u8 variants;
 } zynqmp_devices[] = {
+	{
+		.id = 0x04688093,
+		.device = 1,
+		.variants = ZYNQMP_VARIANT_EG,
+	},
 	{
 		.id = 0x04711093,
 		.device = 2,
@@ -182,7 +192,38 @@ static const struct {
 		.device = 49,
 		.variants = ZYNQMP_VARIANT_DR,
 	},
+	{
+		.id = 0x046d0093,
+		.device = 67,
+		.variants = ZYNQMP_VARIANT_DR,
+	},
 };
+
+static const struct {
+	u32 id;
+	char *name;
+} zynqmp_svd_devices[] = {
+	{
+		.id = 0x04714093,
+		.name = "xck24"
+	},
+	{
+		.id = 0x04724093,
+		.name = "xck26",
+	},
+};
+
+static char *zynqmp_detect_svd_name(u32 idcode)
+{
+	u32 i;
+
+	for (i = 0; i < ARRAY_SIZE(zynqmp_svd_devices); i++) {
+		if (zynqmp_svd_devices[i].id == (idcode & 0x0FFFFFFF))
+			return zynqmp_svd_devices[i].name;
+	}
+
+	return "unknown";
+}
 
 static char *zynqmp_get_silicon_idcode_name(void)
 {
@@ -218,7 +259,7 @@ static char *zynqmp_get_silicon_idcode_name(void)
 	}
 
 	if (i >= ARRAY_SIZE(zynqmp_devices))
-		return "unknown";
+		return zynqmp_detect_svd_name(idcode);
 
 	/* Add device prefix to the name */
 	ret = snprintf(name, ZYNQMP_VERSION_SIZE, "zu%d",
@@ -277,41 +318,91 @@ static char *zynqmp_get_silicon_idcode_name(void)
 }
 #endif
 
-int board_early_init_f(void)
+int __maybe_unused psu_uboot_init(void)
 {
-#if defined(CONFIG_ZYNQMP_PSU_INIT_ENABLED)
 	int ret;
 
 	ret = psu_init();
 	if (ret)
 		return ret;
 
+	/*
+	 * PS_SYSMON_ANALOG_BUS register determines mapping between SysMon
+	 * supply sense channel to SysMon supply registers inside the IP.
+	 * This register must be programmed to complete SysMon IP
+	 * configuration. The default register configuration after
+	 * power-up is incorrect. Hence, fix this by writing the
+	 * correct value - 0x3210.
+	 */
+	writel(ZYNQMP_PS_SYSMON_ANALOG_BUS_VAL,
+	       ZYNQMP_AMS_PS_SYSMON_ANALOG_BUS);
+
 	/* Delay is required for clocks to be propagated */
 	udelay(1000000);
-#endif
-
-#ifdef CONFIG_DEBUG_UART
-	/* Uart debug for sure */
-	debug_uart_init();
-	puts("Debug uart enabled\n"); /* or printch() */
-#endif
-
+	
 	return 0;
 }
+
+#if !defined(CONFIG_SPL_BUILD)
+# if defined(CONFIG_DEBUG_UART_BOARD_INIT)
+void board_debug_uart_init(void)
+{
+#  if defined(CONFIG_ZYNQMP_PSU_INIT_ENABLED)
+	psu_uboot_init();
+#  endif
+}
+# endif
+
+# if defined(CONFIG_BOARD_EARLY_INIT_F)
+int board_early_init_f(void)
+{
+	int ret = 0;
+#  if defined(CONFIG_ZYNQMP_PSU_INIT_ENABLED) && !defined(CONFIG_DEBUG_UART_BOARD_INIT)
+	ret = psu_uboot_init();
+#  endif
+	return ret;
+}
+# endif
+#endif
 
 static int multi_boot(void)
 {
-	u32 multiboot;
+	u32 multiboot = 0;
+	int ret;
 
-	multiboot = readl(&csu_base->multi_boot);
+	ret = zynqmp_mmio_read((ulong)&csu_base->multi_boot, &multiboot);
+	if (ret)
+		return -EINVAL;
 
-	printf("Multiboot:\t%d\n", multiboot);
-
-	return 0;
+	return multiboot;
 }
 
-#define PS_SYSMON_ANALOG_BUS_VAL	0x3210
-#define PS_SYSMON_ANALOG_BUS_REG	0xFFA50914
+#if defined(CONFIG_SPL_BUILD)
+static void restore_jtag(void)
+{
+	if (current_el() != 3)
+		return;
+
+	writel(CSU_JTAG_SEC_GATE_DISABLE, &csu_base->jtag_sec);
+	writel(CSU_JTAG_DAP_ENABLE_DEBUG, &csu_base->jtag_dap_cfg);
+	writel(CSU_JTAG_CHAIN_WR_SETUP, &csu_base->jtag_chain_status_wr);
+	writel(CRLAPB_DBG_LPD_CTRL_SETUP_CLK, &crlapb_base->dbg_lpd_ctrl);
+	writel(CRLAPB_RST_LPD_DBG_RESET, &crlapb_base->rst_lpd_dbg);
+	writel(CSU_PCAP_PROG_RELEASE_PL, &csu_base->pcap_prog);
+}
+#endif
+
+static void print_secure_boot(void)
+{
+	u32 status = 0;
+
+	if (zynqmp_mmio_read((ulong)&csu_base->status, &status))
+		return;
+
+	printf("Secure Boot:\t%sauthenticated, %sencrypted\n",
+	       status & ZYNQMP_CSU_STATUS_AUTHENTICATED ? "" : "not ",
+	       status & ZYNQMP_CSU_STATUS_ENCRYPTED ? "" : "not ");
+}
 
 int board_init(void)
 {
@@ -328,15 +419,17 @@ int board_init(void)
 	if (sizeof(CONFIG_ZYNQMP_SPL_PM_CFG_OBJ_FILE) > 1)
 		zynqmp_pmufw_load_config_object(zynqmp_pm_cfg_obj,
 						zynqmp_pm_cfg_obj_size);
+	printf("Silicon version:\t%d\n", zynqmp_get_silicon_version());
+
+	/* the CSU disables the JTAG interface when secure boot is enabled */
+	if (CONFIG_IS_ENABLED(ZYNQMP_RESTORE_JTAG))
+		restore_jtag();
 #else
 	if (CONFIG_IS_ENABLED(DM_I2C) && CONFIG_IS_ENABLED(I2C_EEPROM))
 		xilinx_read_eeprom();
 #endif
 
 	printf("EL Level:\tEL%d\n", current_el());
-
-	/* Bug in ROM sets wrong value in this register */
-	writel(PS_SYSMON_ANALOG_BUS_VAL, PS_SYSMON_ANALOG_BUS_REG);
 
 #if CONFIG_IS_ENABLED(FPGA) && defined(CONFIG_FPGA_ZYNQMPPL)
 	zynqmppl.name = zynqmp_get_silicon_idcode_name();
@@ -345,8 +438,10 @@ int board_init(void)
 	fpga_add(fpga_xilinx, &zynqmppl);
 #endif
 
+	/* display secure boot information */
+	print_secure_boot();
 	if (current_el() == 3)
-		multi_boot();
+		printf("Multiboot:\t%d\n", multi_boot());
 
 	return 0;
 }
@@ -414,6 +509,31 @@ int dram_init(void)
 
 	return 0;
 }
+
+ulong board_get_usable_ram_top(ulong total_size)
+{
+	phys_size_t size;
+	phys_addr_t reg;
+	struct lmb lmb;
+
+	if (!total_size)
+		return gd->ram_top;
+
+	if (!IS_ALIGNED((ulong)gd->fdt_blob, 0x8))
+		panic("Not 64bit aligned DT location: %p\n", gd->fdt_blob);
+
+	/* found enough not-reserved memory to relocated U-Boot */
+	lmb_init(&lmb);
+	lmb_add(&lmb, gd->ram_base, gd->ram_size);
+	boot_fdt_add_mem_rsv_regions(&lmb, (void *)gd->fdt_blob);
+	size = ALIGN(CONFIG_SYS_MALLOC_LEN + total_size, MMU_SECTION_SIZE);
+	reg = lmb_alloc(&lmb, size, MMU_SECTION_SIZE);
+
+	if (!reg)
+		reg = gd->ram_top - size;
+
+	return reg + size;
+}
 #else
 int dram_init_banksize(void)
 {
@@ -434,9 +554,11 @@ int dram_init(void)
 }
 #endif
 
-void reset_cpu(ulong addr)
+#if !CONFIG_IS_ENABLED(SYSRESET)
+void reset_cpu(void)
 {
 }
+#endif
 
 static u8 __maybe_unused zynqmp_get_bootmode(void)
 {
@@ -447,6 +569,9 @@ static u8 __maybe_unused zynqmp_get_bootmode(void)
 	ret = zynqmp_mmio_read((ulong)&crlapb_base->boot_mode, &reg);
 	if (ret)
 		return -EINVAL;
+
+	debug("HW boot mode: %x\n", reg & BOOT_MODES_MASK);
+	debug("ALT boot mode: %x\n", reg >> BOOT_MODE_ALT_SHIFT);
 
 	if (reg >> BOOT_MODE_ALT_SHIFT)
 		reg >>= BOOT_MODE_ALT_SHIFT;
@@ -495,11 +620,7 @@ static int reset_reason(void)
 
 	env_set("reset_reason", reason);
 
-	ret = zynqmp_mmio_write((ulong)&crlapb_base->reset_reason, ~0, ~0);
-	if (ret)
-		return -EINVAL;
-
-	return ret;
+	return 0;
 }
 
 static int set_fdtfile(void)
@@ -549,7 +670,7 @@ int board_late_init(void)
 	const char *mode;
 	char *new_targets;
 	char *env_targets;
-	int ret;
+	int ret, multiboot;
 
 #if defined(CONFIG_USB_ETHER) && !defined(CONFIG_USB_GADGET_DOWNLOAD)
 	usb_ether_init();
@@ -567,13 +688,17 @@ int board_late_init(void)
 	if (ret)
 		return ret;
 
+	multiboot = multi_boot();
+	if (multiboot >= 0)
+		env_set_hex("multiboot", multiboot);
+
 	bootmode = zynqmp_get_bootmode();
 
 	puts("Bootmode: ");
 	switch (bootmode) {
 	case USB_MODE:
 		puts("USB_MODE\n");
-		mode = "usb";
+		mode = "usb_dfu0 usb_dfu1";
 		env_set("modeboot", "usb_dfu_spl");
 		break;
 	case JTAG_MODE:
@@ -600,6 +725,7 @@ int board_late_init(void)
 
 		mode = "mmc";
 		bootseq = dev_seq(dev);
+		env_set("modeboot", "emmcboot");
 		break;
 	case SD_MODE:
 		puts("SD_MODE\n");
@@ -618,7 +744,7 @@ int board_late_init(void)
 		break;
 	case SD1_LSHFT_MODE:
 		puts("LVL_SHFT_");
-		/* fall through */
+		fallthrough;
 	case SD_MODE1:
 		puts("SD_MODE1\n");
 		if (uclass_get_device_by_name(UCLASS_MMC,
@@ -672,6 +798,7 @@ int board_late_init(void)
 			env_targets ? env_targets : "");
 
 	env_set("boot_targets", new_targets);
+	free(new_targets);
 
 	reset_reason();
 
@@ -683,6 +810,41 @@ int checkboard(void)
 {
 	puts("Board: Xilinx ZynqMP\n");
 	return 0;
+}
+
+int mmc_get_env_dev(void)
+{
+	struct udevice *dev;
+	int bootseq = 0;
+
+	switch (zynqmp_get_bootmode()) {
+	case EMMC_MODE:
+	case SD_MODE:
+		if (uclass_get_device_by_name(UCLASS_MMC,
+					      "mmc@ff160000", &dev) &&
+		    uclass_get_device_by_name(UCLASS_MMC,
+					      "sdhci@ff160000", &dev)) {
+			return -1;
+		}
+		bootseq = dev_seq(dev);
+		break;
+	case SD1_LSHFT_MODE:
+	case SD_MODE1:
+		if (uclass_get_device_by_name(UCLASS_MMC,
+					      "mmc@ff170000", &dev) &&
+		    uclass_get_device_by_name(UCLASS_MMC,
+					      "sdhci@ff170000", &dev)) {
+			return -1;
+		}
+		bootseq = dev_seq(dev);
+		break;
+	default:
+		break;
+	}
+
+	debug("bootseq %d\n", bootseq);
+
+	return bootseq;
 }
 
 enum env_location env_get_location(enum env_operation op, int prio)
@@ -701,20 +863,80 @@ enum env_location env_get_location(enum env_operation op, int prio)
 			return ENVL_FAT;
 		if (IS_ENABLED(CONFIG_ENV_IS_IN_EXT4))
 			return ENVL_EXT4;
-		return ENVL_UNKNOWN;
+		return ENVL_NOWHERE;
 	case NAND_MODE:
 		if (IS_ENABLED(CONFIG_ENV_IS_IN_NAND))
 			return ENVL_NAND;
 		if (IS_ENABLED(CONFIG_ENV_IS_IN_UBI))
 			return ENVL_UBI;
-		return ENVL_UNKNOWN;
+		return ENVL_NOWHERE;
 	case QSPI_MODE_24BIT:
 	case QSPI_MODE_32BIT:
 		if (IS_ENABLED(CONFIG_ENV_IS_IN_SPI_FLASH))
 			return ENVL_SPI_FLASH;
-		return ENVL_UNKNOWN;
+		return ENVL_NOWHERE;
 	case JTAG_MODE:
 	default:
 		return ENVL_NOWHERE;
 	}
 }
+
+#if defined(CONFIG_SET_DFU_ALT_INFO)
+
+#define DFU_ALT_BUF_LEN		SZ_1K
+
+void set_dfu_alt_info(char *interface, char *devstr)
+{
+	u8 multiboot;
+	int bootseq = 0;
+
+	ALLOC_CACHE_ALIGN_BUFFER(char, buf, DFU_ALT_BUF_LEN);
+
+	if (!CONFIG_IS_ENABLED(EFI_HAVE_CAPSULE_SUPPORT) &&
+	    env_get("dfu_alt_info"))
+		return;
+
+	memset(buf, 0, sizeof(buf));
+
+	multiboot = multi_boot();
+	if (multiboot < 0)
+		multiboot = 0;
+
+	multiboot = env_get_hex("multiboot", multiboot);
+	debug("Multiboot: %d\n", multiboot);
+
+	switch (zynqmp_get_bootmode()) {
+	case EMMC_MODE:
+	case SD_MODE:
+	case SD1_LSHFT_MODE:
+	case SD_MODE1:
+		bootseq = mmc_get_env_dev();
+		if (!multiboot)
+			snprintf(buf, DFU_ALT_BUF_LEN,
+				 "mmc %d:1=boot.bin fat %d 1;"
+				 "%s fat %d 1",
+				 bootseq, bootseq,
+				 CONFIG_SPL_FS_LOAD_PAYLOAD_NAME, bootseq);
+		else
+			snprintf(buf, DFU_ALT_BUF_LEN,
+				 "mmc %d:1=boot%04d.bin fat %d 1;"
+				 "%s fat %d 1",
+				 bootseq, multiboot, bootseq,
+				 CONFIG_SPL_FS_LOAD_PAYLOAD_NAME, bootseq);
+		break;
+	case QSPI_MODE_24BIT:
+	case QSPI_MODE_32BIT:
+		snprintf(buf, DFU_ALT_BUF_LEN,
+			 "sf 0:0=boot.bin raw %x 0x1500000;"
+			 "%s raw 0x%x 0x500000",
+			 multiboot * SZ_32K, CONFIG_SPL_FS_LOAD_PAYLOAD_NAME,
+			 CONFIG_SYS_SPI_U_BOOT_OFFS);
+		break;
+	default:
+		return;
+	}
+
+	env_set("dfu_alt_info", buf);
+	puts("DFU alt info setting: done\n");
+}
+#endif

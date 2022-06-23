@@ -9,6 +9,7 @@
 #include <cache.h>
 #include <dm.h>
 #include <hang.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <dm/ofnode.h>
 #include <linux/bitops.h>
@@ -67,8 +68,8 @@ struct v5l2_plat {
 	struct l2cache	*regs;
 	u32		iprefetch;
 	u32		dprefetch;
-	u32 		tram_ctl[2];
-	u32 		dram_ctl[2];
+	u32		tram_ctl[2];
+	u32		dram_ctl[2];
 };
 
 static int v5l2_enable(struct udevice *dev)

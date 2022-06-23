@@ -10,8 +10,10 @@
 #include <image.h>
 #include <log.h>
 #include <asm/cache.h>
+#include <asm/global_data.h>
 #include <asm/ptrace.h>
 #include <linux/kernel.h>
+#include <linux/arm-smccc.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/types.h>
@@ -316,7 +318,7 @@ __weak bool sec_firmware_is_valid(const void *sec_firmware_img)
 		return false;
 	}
 
-	if (!fit_check_format(sec_firmware_img)) {
+	if (fit_check_format(sec_firmware_img, IMAGE_SIZE_INVAL)) {
 		printf("SEC Firmware: Bad firmware image (bad FIT header)\n");
 		return false;
 	}
@@ -373,29 +375,25 @@ bool sec_firmware_support_hwrng(void)
  */
 int sec_firmware_get_random(uint8_t *rand, int bytes)
 {
+	struct arm_smccc_res res;
 	unsigned long long num;
-	struct pt_regs regs;
 	int param1;
 
 	if (!bytes || bytes > 8) {
 		printf("Max Random bytes genration supported is 8\n");
 		return -1;
 	}
-#define SIP_RNG_64 0xC200FF11
-	regs.regs[0] = SIP_RNG_64;
-
 	if (bytes <= 4)
 		param1 = 0;
 	else
 		param1 = 1;
-	regs.regs[1] = param1;
 
-	smc_call(&regs);
-
-	if (regs.regs[0])
+#define SIP_RNG_64 0xC200FF11
+	arm_smccc_smc(SIP_RNG_64, param1, 0, 0, 0, 0, 0, 0, &res);
+	if (res.a0)
 		return -1;
 
-	num = regs.regs[1];
+	num = res.a1;
 	memcpy(rand, &num, bytes);
 
 	return 0;
@@ -472,8 +470,8 @@ int fdt_fixup_kaslr(void *fdt)
 		return 0;
 	}
 
-	ret = sec_firmware_get_random(rand, 8);
-	if (ret < 0) {
+	err = sec_firmware_get_random(rand, 8);
+	if (err < 0) {
 		printf("WARNING: No random number to set kaslr-seed\n");
 		return 0;
 	}

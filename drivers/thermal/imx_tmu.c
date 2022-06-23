@@ -6,6 +6,7 @@
 
 #include <config.h>
 #include <common.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/sys_proto.h>
@@ -21,8 +22,8 @@
 DECLARE_GLOBAL_DATA_PTR;
 
 #define SITES_MAX	16
-#define FLAGS_VER2 	0x1
-#define FLAGS_VER3 	0x2
+#define FLAGS_VER2	0x1
+#define FLAGS_VER3	0x2
 
 #define TMR_DISABLE	0x0
 #define TMR_ME		0x80000000
@@ -343,6 +344,7 @@ static int imx_tmu_bind(struct udevice *dev)
 	ofnode node, offset;
 	const char *name;
 	const void *prop;
+	int minc, maxc;
 
 	debug("%s dev name %s\n", __func__, dev->name);
 
@@ -351,6 +353,10 @@ static int imx_tmu_bind(struct udevice *dev)
 		return 0;
 
 	pdata->zone_node = 1;
+	/* default alert/crit temps based on temp grade */
+	get_cpu_temp_grade(&minc, &maxc);
+	pdata->critical = maxc * 1000;
+	pdata->alert = (maxc - 10) * 1000;
 
 	node = ofnode_path("/thermal-zones");
 	ofnode_for_each_subnode(offset, node) {
@@ -442,6 +448,7 @@ static int imx_tmu_probe(struct udevice *dev)
 	if (pdata->zone_node) {
 		imx_tmu_init(dev);
 		imx_tmu_calibration(dev);
+		imx_tmu_enable_msite(dev);
 	} else {
 		imx_tmu_enable_msite(dev);
 	}

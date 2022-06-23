@@ -14,9 +14,6 @@
 #include "imx6_spl.h"
 #endif
 
-/* Size of malloc() pool */
-#define CONFIG_SYS_MALLOC_LEN		(3 * SZ_1M)
-
 #define BOOT_TARGET_DEVICES(func) \
 	func(MMC, mmc, 0) \
 	func(MMC, mmc, 1) \
@@ -42,25 +39,12 @@
 /* MMC Configuration */
 #define CONFIG_SYS_FSL_ESDHC_ADDR	USDHC4_BASE_ADDR
 
-/* I2C Configs */
-#define CONFIG_SYS_I2C
-#define CONFIG_SYS_I2C_MXC
-#define CONFIG_SYS_I2C_MXC_I2C1		/* enable I2C bus 1 */
-#define CONFIG_SYS_I2C_MXC_I2C3		/* enable I2C bus 3 */
-#define CONFIG_SYS_I2C_SPEED		  100000
-
 /* PMIC */
-#define CONFIG_POWER
-#define CONFIG_POWER_I2C
 #define CONFIG_POWER_PFUZE100
 #define CONFIG_POWER_PFUZE100_I2C_ADDR	0x08
 
 /* Network */
-#define IMX_FEC_BASE			ENET_BASE_ADDR
 #define CONFIG_FEC_MXC_PHYADDR          0x0
-
-#define CONFIG_FEC_XCV_TYPE             RMII
-#define CONFIG_ETHPRIME                 "FEC"
 
 #define CONFIG_EHCI_HCD_INIT_AFTER_RESET
 #define CONFIG_MXC_USB_PORTSC  (PORT_PTS_UTMI | PORT_PTS_PTW)

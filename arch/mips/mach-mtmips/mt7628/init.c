@@ -8,6 +8,7 @@
 #include <common.h>
 #include <clk.h>
 #include <dm.h>
+#include <asm/global_data.h>
 #include <dm/uclass.h>
 #include <dt-bindings/clock/mt7628-clk.h>
 #include <linux/io.h>
@@ -66,6 +67,9 @@ int print_cpuinfo(void)
 
 	val = readl(sysc + SYSCTL_EFUSE_CFG_REG);
 	ee = val & EFUSE_MT7688;
+
+	if (pkg == PKG_ID_KN)
+		ddr = DRAM_DDR1;
 
 	printf("CPU:   MediaTek MT%u%c ver:%u eco:%u\n",
 	       ee ? 7688 : 7628, pkg ? 'A' : 'K', ver, eco);

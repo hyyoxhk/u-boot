@@ -10,7 +10,6 @@
 #include <hwspinlock.h>
 #include <log.h>
 #include <malloc.h>
-#include <asm/arch/gpio.h>
 #include <asm/gpio.h>
 #include <asm/io.h>
 #include <dm/device_compat.h>
@@ -19,6 +18,8 @@
 #include <linux/bitops.h>
 #include <linux/err.h>
 #include <linux/libfdt.h>
+
+#include "../gpio/stm32_gpio_priv.h"
 
 #define MAX_PINS_ONE_IP			70
 #define MODE_BITS_MASK			3
@@ -41,13 +42,12 @@ struct stm32_gpio_bank {
 #ifndef CONFIG_SPL_BUILD
 
 static char pin_name[PINNAME_SIZE];
-#define PINMUX_MODE_COUNT		5
-static const char * const pinmux_mode[PINMUX_MODE_COUNT] = {
-	"gpio input",
-	"gpio output",
-	"analog",
-	"unknown",
-	"alt function",
+static const char * const pinmux_mode[GPIOF_COUNT] = {
+	[GPIOF_INPUT] = "gpio input",
+	[GPIOF_OUTPUT] = "gpio output",
+	[GPIOF_UNUSED] = "analog",
+	[GPIOF_UNKNOWN] = "unknown",
+	[GPIOF_FUNC] = "alt function",
 };
 
 static const char * const pinmux_bias[] = {
@@ -56,7 +56,7 @@ static const char * const pinmux_bias[] = {
 	[STM32_GPIO_PUPD_DOWN] = "pull-down",
 };
 
-static const char * const pinmux_input[] = {
+static const char * const pinmux_otype[] = {
 	[STM32_GPIO_OTYPE_PP] = "push-pull",
 	[STM32_GPIO_OTYPE_OD] = "open-drain",
 };
@@ -157,10 +157,7 @@ static struct udevice *stm32_pinctrl_get_gpio_dev(struct udevice *dev,
 			 * we found the bank, convert pin selector to
 			 * gpio bank index
 			 */
-			*idx = stm32_offset_to_index(gpio_bank->gpio_dev,
-						     selector - pin_count);
-			if (IS_ERR_VALUE(*idx))
-				return NULL;
+			*idx = selector - pin_count;
 
 			return gpio_bank->gpio_dev;
 		}
@@ -216,29 +213,25 @@ static int stm32_pinctrl_get_pin_muxing(struct udevice *dev,
 		selector, gpio_idx, mode);
 	priv = dev_get_priv(gpio_dev);
 	pupd = (readl(&priv->regs->pupdr) >> (gpio_idx * 2)) & PUPD_MASK;
-
+	otype = (readl(&priv->regs->otyper) >> gpio_idx) & OTYPE_MSK;
 
 	switch (mode) {
 	case GPIOF_UNKNOWN:
-		/* should never happen */
-		return -EINVAL;
 	case GPIOF_UNUSED:
 		snprintf(buf, size, "%s", pinmux_mode[mode]);
 		break;
 	case GPIOF_FUNC:
 		af_num = stm32_pinctrl_get_af(gpio_dev, gpio_idx);
-		snprintf(buf, size, "%s %d %s", pinmux_mode[mode], af_num,
-			 pinmux_bias[pupd]);
+		snprintf(buf, size, "%s %d %s %s", pinmux_mode[mode], af_num,
+			 pinmux_otype[otype], pinmux_bias[pupd]);
 		break;
 	case GPIOF_OUTPUT:
-		snprintf(buf, size, "%s %s %s",
-			 pinmux_mode[mode], pinmux_bias[pupd],
-			 label ? label : "");
+		snprintf(buf, size, "%s %s %s %s",
+			 pinmux_mode[mode], pinmux_otype[otype],
+			 pinmux_bias[pupd], label ? label : "");
 		break;
 	case GPIOF_INPUT:
-		otype = (readl(&priv->regs->otyper) >> gpio_idx) & OTYPE_MSK;
-		snprintf(buf, size, "%s %s %s %s",
-			 pinmux_mode[mode], pinmux_input[otype],
+		snprintf(buf, size, "%s %s %s", pinmux_mode[mode],
 			 pinmux_bias[pupd], label ? label : "");
 		break;
 	}
@@ -410,6 +403,9 @@ static int stm32_pinctrl_bind(struct udevice *dev)
 
 	dev_for_each_subnode(node, dev) {
 		dev_dbg(dev, "bind %s\n", ofnode_get_name(node));
+
+		if (!ofnode_is_enabled(node))
+			continue;
 
 		ofnode_get_property(node, "gpio-controller", &ret);
 		if (ret < 0)

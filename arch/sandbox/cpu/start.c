@@ -4,20 +4,22 @@
  */
 
 #include <common.h>
+#include <cli.h>
 #include <command.h>
-#include <dm/root.h>
 #include <efi_loader.h>
 #include <errno.h>
+#include <event.h>
 #include <init.h>
 #include <log.h>
 #include <os.h>
-#include <cli.h>
 #include <sort.h>
 #include <asm/getopt.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/malloc.h>
 #include <asm/sections.h>
 #include <asm/state.h>
+#include <dm/root.h>
 #include <linux/ctype.h>
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -57,7 +59,8 @@ static int h_compare_opt(const void *p1, const void *p2)
 int sandbox_early_getopt_check(void)
 {
 	struct sandbox_state *state = state_get_current();
-	struct sandbox_cmdline_option **sb_opt = __u_boot_sandbox_option_start;
+	struct sandbox_cmdline_option **sb_opt =
+		__u_boot_sandbox_option_start();
 	size_t num_options = __u_boot_sandbox_option_count();
 	size_t i;
 	int max_arg_len, max_noarg_len;
@@ -87,7 +90,7 @@ int sandbox_early_getopt_check(void)
 
 	/* Sort the options */
 	size = sizeof(*sorted_opt) * num_options;
-	sorted_opt = malloc(size);
+	sorted_opt = os_malloc(size);
 	if (!sorted_opt) {
 		printf("No memory to sort options\n");
 		os_exit(1);
@@ -117,10 +120,11 @@ int sandbox_early_getopt_check(void)
 	os_exit(0);
 }
 
-int misc_init_f(void)
+static int sandbox_misc_init_f(void *ctx, struct event *event)
 {
 	return sandbox_early_getopt_check();
 }
+EVENT_SPY(EVT_MISC_INIT_F, sandbox_misc_init_f);
 
 static int sandbox_cmdline_cb_help(struct sandbox_state *state, const char *arg)
 {
@@ -187,7 +191,7 @@ static int sandbox_cmdline_cb_default_fdt(struct sandbox_state *state,
 	int len;
 
 	len = strlen(state->argv[0]) + strlen(fmt) + 1;
-	fname = malloc(len);
+	fname = os_malloc(len);
 	if (!fname)
 		return -ENOMEM;
 	snprintf(fname, len, fmt, state->argv[0]);
@@ -207,7 +211,7 @@ static int sandbox_cmdline_cb_test_fdt(struct sandbox_state *state,
 	int len;
 
 	len = strlen(state->argv[0]) + strlen(fmt) + 1;
-	fname = malloc(len);
+	fname = os_malloc(len);
 	if (!fname)
 		return -ENOMEM;
 	strcpy(fname, state->argv[0]);
@@ -215,7 +219,7 @@ static int sandbox_cmdline_cb_test_fdt(struct sandbox_state *state,
 	if (!p)
 		p = fname + strlen(fname);
 	len -= p - fname;
-	snprintf(p, len, fmt, p);
+	snprintf(p, len, fmt);
 	state->fdt_fname = fname;
 
 	return 0;
@@ -388,6 +392,25 @@ static int sandbox_cmdline_cb_select_unittests(struct sandbox_state *state,
 }
 SANDBOX_CMDLINE_OPT_SHORT(select_unittests, 'k', 1, "Select unit tests to run");
 
+static int sandbox_cmdline_cb_signals(struct sandbox_state *state,
+				      const char *arg)
+{
+	state->handle_signals = true;
+
+	return 0;
+}
+SANDBOX_CMDLINE_OPT_SHORT(signals, 'S', 0,
+			  "Handle signals (such as SIGSEGV) in sandbox");
+
+static int sandbox_cmdline_cb_autoboot_keyed(struct sandbox_state *state,
+					     const char *arg)
+{
+	state->autoboot_keyed = true;
+
+	return 0;
+}
+SANDBOX_CMDLINE_OPT(autoboot_keyed, 0, "Allow keyed autoboot");
+
 static void setup_ram_buf(struct sandbox_state *state)
 {
 	/* Zero the RAM buffer if we didn't read it, to keep valgrind happy */
@@ -413,8 +436,10 @@ void __efi_runtime EFIAPI efi_reset_system(
 		efi_status_t reset_status,
 		unsigned long data_size, void *reset_data)
 {
-	os_fd_restore();
-	os_relaunch(os_argv);
+	if (reset_type == EFI_RESET_SHUTDOWN)
+		sandbox_exit();
+	else
+		sandbox_reset();
 }
 
 void sandbox_reset(void)
@@ -424,9 +449,6 @@ void sandbox_reset(void)
 	if (state_uninit())
 		os_exit(2);
 
-	if (dm_uninit())
-		os_exit(2);
-
 	/* Restart U-Boot */
 	os_relaunch(os_argv);
 }
@@ -434,25 +456,34 @@ void sandbox_reset(void)
 int main(int argc, char *argv[])
 {
 	struct sandbox_state *state;
+	void * text_base;
 	gd_t data;
+	int size;
 	int ret;
+
+	text_base = os_find_text_base();
+
+	/*
+	 * This must be the first invocation of os_malloc() to have
+	 * state->ram_buf in the low 4 GiB.
+	 */
+	ret = state_init();
+	if (ret)
+		goto err;
 
 	/*
 	 * Copy argv[] so that we can pass the arguments in the original
 	 * sequence when resetting the sandbox.
 	 */
-	os_argv = calloc(argc + 1, sizeof(char *));
+	size = sizeof(char *) * (argc + 1);
+	os_argv = os_malloc(size);
 	if (!os_argv)
 		os_exit(1);
-	memcpy(os_argv, argv, sizeof(char *) * (argc + 1));
+	memcpy(os_argv, argv, size);
 
 	memset(&data, '\0', sizeof(data));
 	gd = &data;
-	gd->arch.text_base = os_find_text_base();
-
-	ret = state_init();
-	if (ret)
-		goto err;
+	gd->arch.text_base = text_base;
 
 	state = state_get_current();
 	if (os_parse_args(state, argc, argv))
@@ -469,9 +500,11 @@ int main(int argc, char *argv[])
 	if (ret)
 		goto err;
 
-	ret = os_setup_signal_handlers();
-	if (ret)
-		goto err;
+	if (state->handle_signals) {
+		ret = os_setup_signal_handlers();
+		if (ret)
+			goto err;
+	}
 
 #if CONFIG_VAL(SYS_MALLOC_F_LEN)
 	gd->malloc_base = CONFIG_MALLOC_F_ADDR;
@@ -488,7 +521,6 @@ int main(int argc, char *argv[])
 	gd->reloc_off = (ulong)gd->arch.text_base;
 
 	/* sandbox test: log functions called before log_init in board_init_f */
-	log_info("sandbox: starting...\n");
 	log_debug("debug: %s\n", __func__);
 
 	/* Do pre- and post-relocation init */

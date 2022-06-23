@@ -25,11 +25,6 @@
 #endif
 #define CONFIG_SYS_NS16550_CLK		48000000
 
-#ifndef CONFIG_SPL_BUILD
-/* Network defines. */
-#define CONFIG_NET_RETRY_COUNT         10
-#endif
-
 /*
  * SPL related defines.  The Public RAM memory map the ROM defines the
  * area between 0x402F0400 and 0x4030B800 as a download area and
@@ -46,9 +41,6 @@
  * Since SPL did pll and ddr initialization for us,
  * we don't need to do it twice.
  */
-#if !defined(CONFIG_SPL_BUILD) && !defined(CONFIG_NOR_BOOT)
-#define CONFIG_SKIP_LOWLEVEL_INIT
-#endif
 
 /*
  * When building U-Boot such that there is no previous loader

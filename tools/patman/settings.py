@@ -198,14 +198,14 @@ def CreatePatmanConfigFile(gitutil, config_fname):
     Returns:
         None
     """
-    name = gitutil.GetDefaultUserName()
+    name = gitutil.get_default_user_name()
     if name == None:
-        name = raw_input("Enter name: ")
+        name = input("Enter name: ")
 
-    email = gitutil.GetDefaultUserEmail()
+    email = gitutil.get_default_user_email()
 
     if email == None:
-        email = raw_input("Enter email: ")
+        email = input("Enter email: ")
 
     try:
         f = open(config_fname, 'w')

@@ -12,6 +12,7 @@
 #include <net.h>
 #include <phy.h>
 #include <syscon.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch-rockchip/periph.h>
 #include <asm/arch-rockchip/clock.h>
@@ -564,7 +565,7 @@ static int gmac_rockchip_probe(struct udevice *dev)
 	ulong rate;
 	int ret;
 
-	ret = clk_set_defaults(dev, 0);
+	ret = clk_set_defaults(dev, CLK_DEFAULTS_PRE);
 	if (ret)
 		debug("%s clk_set_defaults failed %d\n", __func__, ret);
 

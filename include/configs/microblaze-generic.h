@@ -11,20 +11,12 @@
 /* Microblaze is microblaze_0 */
 #define XILINX_FSL_NUMBER	3
 
-/* MicroBlaze CPU */
-#define	MICROBLAZE_V5		1
-
 #define CONFIG_SYS_BOOTM_LEN	(64 * 1024 * 1024)
 
 /* uart */
 /* The following table includes the supported baudrates */
 # define CONFIG_SYS_BAUDRATE_TABLE \
 	{300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400}
-
-/* setting reset address */
-/*#define	CONFIG_SYS_RESET_ADDRESS	CONFIG_SYS_TEXT_BASE*/
-
-#define CONFIG_SYS_MALLOC_LEN	0xC0000
 
 /* Stack location before relocation */
 #define CONFIG_SYS_INIT_SP_OFFSET	(CONFIG_SYS_TEXT_BASE - \
@@ -34,35 +26,22 @@
 /* ?empty sector */
 # define CONFIG_SYS_FLASH_EMPTY_INFO	1
 /* max number of memory banks */
-# define CONFIG_SYS_MAX_FLASH_BANKS	1
 /* max number of sectors on one chip */
 # define CONFIG_SYS_MAX_FLASH_SECT	2048
 #endif
-
-#define CONFIG_ICACHE
-#define CONFIG_DCACHE
 
 #ifndef XILINX_DCACHE_BYTE_SIZE
 #define XILINX_DCACHE_BYTE_SIZE	32768
 #endif
 
-/*
- * BOOTP options
- */
-#define CONFIG_BOOTP_BOOTFILESIZE
-
 /* size of console buffer */
 #define	CONFIG_SYS_CBSIZE	512
 /* max number of command args */
 #define	CONFIG_SYS_MAXARGS	15
-/* default load address */
-#define	CONFIG_SYS_LOAD_ADDR	0
 
 #define	CONFIG_HOSTNAME		"microblaze-generic"
 
 /* architecture dependent code */
-#define	CONFIG_SYS_USR_EXCEP	/* user exception */
-
 #if defined(CONFIG_CMD_PXE) && defined(CONFIG_CMD_DHCP)
 #define BOOT_TARGET_DEVICES_PXE(func)	func(PXE, pxe, na)
 #else
@@ -135,10 +114,6 @@
 	"setenv stdin serial\0"\
 	"script_size_f=0x40000\0"\
 	BOOTENV
-#endif
-
-#if defined(CONFIG_XILINX_AXIEMAC)
-# define CONFIG_SYS_FAULT_ECHO_LINK_DOWN	1
 #endif
 
 /* SPL part */

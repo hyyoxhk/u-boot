@@ -423,6 +423,9 @@ int write_mbr_partitions(struct blk_desc *dev,
 		ext_part_sect = next_ebr;
 	}
 
+	/* Update the partition table entries*/
+	part_init(dev);
+
 	return 0;
 }
 
@@ -456,10 +459,12 @@ int layout_mbr_partitions(struct disk_partition *p, int count,
 			ext = &p[i];
 	}
 
-	if (i >= 4 && !ext) {
-		printf("%s: extended partition is needed for more than 4 partitions\n",
-		        __func__);
-		return -1;
+	if (count < 4)
+		return 0;
+
+	if (!ext) {
+		log_err("extended partition is needed for more than 4 partitions\n");
+		return -EINVAL;
 	}
 
 	/* calculate extended volumes start and size if needed */
@@ -498,6 +503,9 @@ int write_mbr_sector(struct blk_desc *dev_desc, void *buf)
 		       __func__, "MBR");
 		return 1;
 	}
+
+	/* Update the partition table entries*/
+	part_init(dev_desc);
 
 	return 0;
 }

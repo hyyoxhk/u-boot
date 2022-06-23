@@ -38,15 +38,10 @@
  * in the README.mpc85xxads.
  */
 
-#ifndef CONFIG_SYS_CLK_FREQ
-#define CONFIG_SYS_CLK_FREQ	66666666
-#endif
-
 /*
  * These can be toggled for performance analysis, otherwise use default.
  */
 #define CONFIG_L2_CACHE			/* toggle L2 cache		*/
-#define CONFIG_BTB			/* toggle branch predition	*/
 
 #define CONFIG_SYS_INIT_DBCR DBCR_IDM		/* Enable Debug Exceptions	*/
 
@@ -57,22 +52,16 @@
 
 /* DDR Setup */
 #define CONFIG_SPD_EEPROM		/* Use SPD EEPROM for DDR setup */
-#define CONFIG_DDR_SPD
 
-#undef CONFIG_ECC_INIT_VIA_DDRCONTROLLER	/* DDR controller or DMA? */
 #define CONFIG_MEM_INIT_VALUE	0xDeadBeef
 
 #define CONFIG_SYS_DDR_SDRAM_BASE	0x00000000
 #define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
 #define CONFIG_VERY_BIG_RAM
 
-#define CONFIG_DIMM_SLOTS_PER_CTLR	1
-#define CONFIG_CHIP_SELECTS_PER_CTRL	2
-
 /* I2C addresses of SPD EEPROMs */
 #define SPD_EEPROM_ADDRESS	0x50	/* CTLR 0 DIMM 0 */
 
-#define CONFIG_DDR_DEFAULT_CL	30		/* CAS latency 3	*/
 
 /* Hardcoded values, to use instead of SPD */
 #define CONFIG_SYS_DDR_CS0_BNDS		0x0000000f
@@ -100,18 +89,10 @@
 #define CONFIG_SYS_LBC_FLASH_BASE	CONFIG_SYS_FLASH1	/* Localbus flash start	*/
 #define CONFIG_SYS_FLASH_BASE		CONFIG_SYS_LBC_FLASH_BASE /* start of FLASH	*/
 
-#define CONFIG_SYS_BR0_PRELIM		0xfe001001	/* port size 16bit	*/
-#define CONFIG_SYS_OR0_PRELIM		0xfe000030	/* 32MB Flash		*/
-#define CONFIG_SYS_BR1_PRELIM		0xfc001001	/* port size 16bit	*/
-#define CONFIG_SYS_OR1_PRELIM		0xfe000030	/* 32MB Flash		*/
-
-#define CONFIG_SYS_MAX_FLASH_BANKS	2		/* number of banks	*/
 #define CONFIG_SYS_MAX_FLASH_SECT	256		/* sectors per device	*/
 #undef	CONFIG_SYS_FLASH_CHECKSUM
 #define CONFIG_SYS_FLASH_ERASE_TOUT	60000	/* Flash Erase Timeout (ms)	*/
 #define CONFIG_SYS_FLASH_WRITE_TOUT	500	/* Flash Write Timeout (ms)	*/
-
-#define CONFIG_SYS_MONITOR_BASE	CONFIG_SYS_TEXT_BASE	/* start of monitor	*/
 
 #define CONFIG_SYS_LBC_LCRR		0x00030004    /* LB clock ratio reg	*/
 #define CONFIG_SYS_LBC_LBCR		0x00000000    /* LB config reg		*/
@@ -126,14 +107,11 @@
 #define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
 
 #define CONFIG_SYS_MONITOR_LEN		(384 * 1024)	/* Reserve 384KiB for Mon */
-#define CONFIG_SYS_MALLOC_LEN		(4 << 20)	/* Reserve 4 MB for malloc */
 
 /* FPGA and NAND */
 #define CONFIG_SYS_FPGA_BASE		0xc0000000
 #define CONFIG_SYS_FPGA_SIZE		0x00100000	/* 1 MB		*/
 #define CONFIG_SYS_HMI_BASE		0xc0010000
-#define CONFIG_SYS_BR3_PRELIM		0xc0001881	/* UPMA, 32-bit */
-#define CONFIG_SYS_OR3_PRELIM		0xfff00000	/* 1 MB 	*/
 
 #define CONFIG_SYS_NAND_BASE		(CONFIG_SYS_FPGA_BASE + 0x70)
 #define CONFIG_SYS_MAX_NAND_DEVICE	1
@@ -141,12 +119,8 @@
 /* LIME GDC */
 #define CONFIG_SYS_LIME_BASE		0xc8000000
 #define CONFIG_SYS_LIME_SIZE		0x04000000	/* 64 MB	*/
-#define CONFIG_SYS_BR2_PRELIM		0xc80018a1	/* UPMB, 32-bit	*/
-#define CONFIG_SYS_OR2_PRELIM		0xfc000000	/* 64 MB	*/
 
 #define CONFIG_SYS_SPD_BUS_NUM 0
-
-#define CONFIG_SYS_EEPROM_PAGE_WRITE_BITS	4
 
 /*
  * General PCI
@@ -177,10 +151,6 @@
 #define TSEC3_FLAGS		TSEC_GIGABIT
 
 /* Options are: TSEC[0,1] */
-#define CONFIG_ETHPRIME		"TSEC0"
-
-#define CONFIG_HAS_ETH0
-#define CONFIG_HAS_ETH1
 
 /*
  * Environment
@@ -189,19 +159,9 @@
 #define CONFIG_LOADS_ECHO	1	/* echo on for serial download	*/
 #define CONFIG_SYS_LOADS_BAUD_CHANGE	1	/* allow baudrate change	*/
 
-#define	CONFIG_TIMESTAMP		/* Print image info with ts	*/
-
-/*
- * BOOTP options
- */
-#define CONFIG_BOOTP_BOOTFILESIZE
-
-#undef CONFIG_WATCHDOG			/* watchdog disabled		*/
-
 /*
  * Miscellaneous configurable options
  */
-#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address		*/
 
 /*
  * For booting Linux, the board info and command line data
@@ -210,11 +170,6 @@
  */
 #define CONFIG_SYS_BOOTMAPSZ	(8 << 20)	/* Initial Memory map for Linux	*/
 
-#if defined(CONFIG_CMD_KGDB)
-#define CONFIG_KGDB_BAUDRATE	230400	/* speed to run kgdb serial port*/
-#endif
-
-#define CONFIG_LOADADDR	 200000		/* default addr for tftp & bootm*/
 
 #define	CONFIG_EXTRA_ENV_SETTINGS					\
 	"netdev=eth0\0"							\
@@ -254,23 +209,22 @@
 		"era fe000000 fe1dffff;"				\
 		"cp.b 100000 fe000000 ${filesize};"			\
 		"setenv filesize;saveenv\0"				\
-	"update_fdt=tftp 100000 ${fdt_file};" 				\
+	"update_fdt=tftp 100000 ${fdt_file};"				\
 		"era fe1e0000 fe1fffff;"				\
 		"cp.b 100000 fe1e0000 ${filesize};"			\
 		"setenv filesize;saveenv\0"				\
-	"update_initrd=tftp 100000 ${initrd_file};" 			\
+	"update_initrd=tftp 100000 ${initrd_file};"			\
 		"era fe200000 fe9fffff;"				\
 		"cp.b 100000 fe200000 ${filesize};"			\
 		"setenv filesize;saveenv\0"				\
 	"clean_data=era fea00000 fff5ffff\0"				\
-	"usbargs=setenv bootargs root=/dev/sda1 rw\0" 			\
-	"load_usb=usb start;" 						\
+	"usbargs=setenv bootargs root=/dev/sda1 rw\0"			\
+	"load_usb=usb start;"						\
 		"ext2load usb 0:1 ${kernel_addr_r} /boot/uImage\0"	\
 	"boot_usb=run load_usb usbargs addcons;"			\
 		"bootm ${kernel_addr_r} - ${fdt_addr};"			\
 		"bootm ${kernel_addr} ${ramdisk_addr} ${fdt_addr}\0"	\
 	""
-#define CONFIG_BOOTCOMMAND	"run boot_nor"
 
 /* pass open firmware flat tree */
 

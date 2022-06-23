@@ -13,6 +13,7 @@
 #include <dwmmc.h>
 #include <errno.h>
 #include <fdtdec.h>
+#include <asm/global_data.h>
 #include <dm/device_compat.h>
 #include <linux/intel-smc.h>
 #include <linux/libfdt.h>
@@ -142,6 +143,8 @@ static int socfpga_dwmmc_of_to_plat(struct udevice *dev)
 	priv->smplsel = fdtdec_get_uint(gd->fdt_blob, dev_of_offset(dev),
 					"smplsel", 0);
 	host->priv = priv;
+
+	host->fifo_mode = dev_read_bool(dev, "fifo-mode");
 
 	return 0;
 }

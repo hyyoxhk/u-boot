@@ -12,6 +12,8 @@
  * A23 specific configuration
  */
 
+#include <asm/arch/cpu.h>
+
 /*
  * Include common sunxi configuration where most the settings are
  */

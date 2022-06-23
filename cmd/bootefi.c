@@ -8,6 +8,7 @@
 #define LOG_CATEGORY LOGC_EFI
 
 #include <common.h>
+#include <bootm.h>
 #include <charset.h>
 #include <command.h>
 #include <dm.h>
@@ -18,6 +19,7 @@
 #include <image.h>
 #include <log.h>
 #include <malloc.h>
+#include <asm/global_data.h>
 #include <linux/libfdt.h>
 #include <linux/libfdt_env.h>
 #include <mapmem.h>
@@ -63,6 +65,9 @@ void efi_set_bootdev(const char *dev, const char *devnr, const char *path,
 	struct efi_device_path *device, *image;
 	efi_status_t ret;
 
+	log_debug("dev=%s, devnr=%s, path=%s, buffer=%p, size=%zx\n", dev,
+		  devnr, path, buffer, buffer_size);
+
 	/* Forget overwritten image */
 	if (buffer + buffer_size >= image_addr &&
 	    image_addr + image_size >= buffer)
@@ -70,18 +75,19 @@ void efi_set_bootdev(const char *dev, const char *devnr, const char *path,
 
 	/* Remember only PE-COFF and FIT images */
 	if (efi_check_pe(buffer, buffer_size, NULL) != EFI_SUCCESS) {
-#ifdef CONFIG_FIT
-		if (!fit_check_format(buffer))
+		if (IS_ENABLED(CONFIG_FIT) &&
+		    !fit_check_format(buffer, IMAGE_SIZE_INVAL)) {
+			/*
+			 * FIT images of type EFI_OS are started via command
+			 * bootm. We should not use their boot device with the
+			 * bootefi command.
+			 */
+			buffer = 0;
+			buffer_size = 0;
+		} else {
+			log_debug("- not remembering image\n");
 			return;
-		/*
-		 * FIT images of type EFI_OS are started via command bootm.
-		 * We should not use their boot device with the bootefi command.
-		 */
-		buffer = 0;
-		buffer_size = 0;
-#else
-		return;
-#endif
+		}
 	}
 
 	/* efi_set_bootdev() is typically called repeatedly, recover memory */
@@ -101,7 +107,11 @@ void efi_set_bootdev(const char *dev, const char *devnr, const char *path,
 			efi_free_pool(image_tmp);
 		}
 		bootefi_image_path = image;
+		log_debug("- recorded device %ls\n", efi_dp_str(device));
+		if (image)
+			log_debug("- and image %ls\n", efi_dp_str(image));
 	} else {
+		log_debug("- efi_dp_from_name() failed, err=%lx\n", ret);
 		efi_clear_bootdev();
 	}
 }
@@ -255,8 +265,8 @@ efi_status_t efi_install_fdt(void *fdt)
 	 */
 #if CONFIG_IS_ENABLED(GENERATE_ACPI_TABLE)
 	if (fdt) {
-		log_err("ERROR: can't have ACPI table and device tree.\n");
-		return EFI_LOAD_ERROR;
+		log_warning("WARNING: Can't have ACPI table and device tree - ignoring DT.\n");
+		return EFI_SUCCESS;
 	}
 #else
 	bootm_headers_t img = { 0 };
@@ -279,7 +289,7 @@ efi_status_t efi_install_fdt(void *fdt)
 				return EFI_NOT_FOUND;
 			}
 		}
-		fdt_addr = simple_strtoul(fdt_opt, NULL, 16);
+		fdt_addr = hextoul(fdt_opt, NULL);
 		if (!fdt_addr) {
 			log_err("ERROR: invalid $fdt_addr or $fdtcontroladdr\n");
 			return EFI_LOAD_ERROR;
@@ -307,6 +317,8 @@ efi_status_t efi_install_fdt(void *fdt)
 
 	/* Create memory reservations as indicated by the device tree */
 	efi_carve_out_dt_rsv(fdt);
+
+	efi_try_purge_kaslr_seed(fdt);
 
 	/* Install device tree as UEFI table */
 	ret = efi_install_configuration_table(&efi_guid_fdt, fdt);
@@ -338,6 +350,22 @@ static efi_status_t do_bootefi_exec(efi_handle_t handle, void *load_options)
 	efi_uintn_t exit_data_size = 0;
 	u16 *exit_data = NULL;
 
+	/* On ARM switch from EL3 or secure mode to EL2 or non-secure mode */
+	switch_to_non_secure_mode();
+
+	/*
+	 * The UEFI standard requires that the watchdog timer is set to five
+	 * minutes when invoking an EFI boot option.
+	 *
+	 * Unified Extensible Firmware Interface (UEFI), version 2.7 Errata A
+	 * 7.5. Miscellaneous Boot Services - EFI_BOOT_SERVICES.SetWatchdogTimer
+	 */
+	ret = efi_set_watchdog(300);
+	if (ret != EFI_SUCCESS) {
+		log_err("ERROR: Failed to set watchdog timer\n");
+		goto out;
+	}
+
 	/* Call our payload! */
 	ret = EFI_CALL(efi_start_image(handle, &exit_data_size, &exit_data));
 	if (ret != EFI_SUCCESS) {
@@ -351,7 +379,14 @@ static efi_status_t do_bootefi_exec(efi_handle_t handle, void *load_options)
 
 	efi_restore_gd();
 
+out:
 	free(load_options);
+
+	if (IS_ENABLED(CONFIG_EFI_LOAD_FILE2_INITRD))
+		efi_initrd_deregister();
+
+	/* Control is returned to U-Boot, disable EFI watchdog */
+	efi_set_watchdog(0);
 
 	return ret;
 }
@@ -387,10 +422,11 @@ static int do_efibootmgr(void)
  * Set up memory image for the binary to be loaded, prepare device path, and
  * then call do_bootefi_exec() to execute it.
  *
- * @image_opt:	string of image start address
+ * @image_opt:	string with image start address
+ * @size_opt:	string with image size or NULL
  * Return:	status code
  */
-static int do_bootefi_image(const char *image_opt)
+static int do_bootefi_image(const char *image_opt, const char *size_opt)
 {
 	void *image_buf;
 	unsigned long addr, size;
@@ -408,14 +444,21 @@ static int do_bootefi_image(const char *image_opt)
 		/* Check that a numeric value was passed */
 		if (!addr)
 			return CMD_RET_USAGE;
-
 		image_buf = map_sysmem(addr, 0);
 
-		if (image_buf != image_addr) {
-			log_err("No UEFI binary known at %s\n", image_opt);
-			return CMD_RET_FAILURE;
+		if (size_opt) {
+			size = strtoul(size_opt, NULL, 16);
+			if (!size)
+				return CMD_RET_USAGE;
+			efi_clear_bootdev();
+		} else {
+			if (image_buf != image_addr) {
+				log_err("No UEFI binary known at %s\n",
+					image_opt);
+				return CMD_RET_FAILURE;
+			}
+			size = image_size;
 		}
-		size = image_size;
 	}
 	ret = efi_run_image(image_buf, size);
 
@@ -441,6 +484,7 @@ efi_status_t efi_run_image(void *source_buffer, efi_uintn_t source_size)
 	u16 *load_options;
 
 	if (!bootefi_device_path || !bootefi_image_path) {
+		log_debug("Not loaded from disk\n");
 		/*
 		 * Special case for efi payload not loaded from disk,
 		 * such as 'bootefi hello' or for example payload
@@ -466,6 +510,7 @@ efi_status_t efi_run_image(void *source_buffer, efi_uintn_t source_size)
 		file_path = efi_dp_append(bootefi_device_path,
 					  bootefi_image_path);
 		msg_path = bootefi_image_path;
+		log_debug("Loaded from disk\n");
 	}
 
 	log_info("Booting %pD\n", msg_path);
@@ -604,6 +649,7 @@ static int do_bootefi(struct cmd_tbl *cmdtp, int flag, int argc,
 		      char *const argv[])
 {
 	efi_status_t ret;
+	char *img_addr, *img_size, *str_copy, *pos;
 	void *fdt;
 
 	if (argc < 2)
@@ -620,7 +666,7 @@ static int do_bootefi(struct cmd_tbl *cmdtp, int flag, int argc,
 	if (argc > 2) {
 		uintptr_t fdt_addr;
 
-		fdt_addr = simple_strtoul(argv[2], NULL, 16);
+		fdt_addr = hextoul(argv[2], NULL);
 		fdt = map_sysmem(fdt_addr, 0);
 	} else {
 		fdt = EFI_FDT_USE_INTERNAL;
@@ -639,16 +685,24 @@ static int do_bootefi(struct cmd_tbl *cmdtp, int flag, int argc,
 	if (!strcmp(argv[1], "selftest"))
 		return do_efi_selftest();
 #endif
+	str_copy = strdup(argv[1]);
+	if (!str_copy) {
+		log_err("Out of memory\n");
+		return CMD_RET_FAILURE;
+	}
+	pos = str_copy;
+	img_addr = strsep(&pos, ":");
+	img_size = strsep(&pos, ":");
+	ret = do_bootefi_image(img_addr, img_size);
+	free(str_copy);
 
-	return do_bootefi_image(argv[1]);
+	return ret;
 }
 
 #ifdef CONFIG_SYS_LONGHELP
 static char bootefi_help_text[] =
-	"<image address> [fdt address]\n"
-	"  - boot EFI payload stored at address <image address>.\n"
-	"    If specified, the device tree located at <fdt address> gets\n"
-	"    exposed as EFI configuration table.\n"
+	"<image address>[:<image size>] [<fdt address>]\n"
+	"  - boot EFI payload\n"
 #ifdef CONFIG_CMD_BOOTEFI_HELLO
 	"bootefi hello\n"
 	"  - boot a sample Hello World application stored within U-Boot\n"
@@ -670,7 +724,7 @@ static char bootefi_help_text[] =
 #endif
 
 U_BOOT_CMD(
-	bootefi, 3, 0, do_bootefi,
+	bootefi, 4, 0, do_bootefi,
 	"Boots an EFI payload from memory",
 	bootefi_help_text
 );

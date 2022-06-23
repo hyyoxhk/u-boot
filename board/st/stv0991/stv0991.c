@@ -15,6 +15,7 @@
 #include <asm/arch/hardware.h>
 #include <asm/arch/gpio.h>
 #include <netdev.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <dm/platform_data/serial_pl01x.h>
 
@@ -36,7 +37,7 @@ U_BOOT_DRVINFO(stv09911_serials) = {
 };
 #endif
 
-#ifdef CONFIG_SHOW_BOOT_PROGRESS
+#if CONFIG_IS_ENABLED(BOOTSTAGE)
 void show_boot_progress(int progress)
 {
 	printf("%i\n", progress);

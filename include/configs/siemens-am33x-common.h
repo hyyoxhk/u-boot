@@ -15,18 +15,6 @@
 
 #include <asm/arch/omap.h>
 
-#define CONFIG_DMA_COHERENT
-#define CONFIG_DMA_COHERENT_SIZE	(1 << 20)
-
-#define CONFIG_SYS_MALLOC_LEN		(16 * 1024 * 1024)
-#ifdef CONFIG_SIEMENS_MACH_TYPE
-#define CONFIG_MACH_TYPE		CONFIG_SIEMENS_MACH_TYPE
-#endif
-
-#define CONFIG_CMDLINE_TAG		/* enable passing of ATAGs */
-#define CONFIG_SETUP_MEMORY_TAGS
-#define CONFIG_INITRD_TAG
-
 /* commands to include */
 
 #ifndef CONFIG_SPL_BUILD
@@ -53,8 +41,6 @@
  * start addr of ram disk
  */
 
-#define CONFIG_SYS_LOAD_ADDR		0x81000000 /* Default load address */
-
  /* Physical Memory Map */
 #define PHYS_DRAM_1			0x80000000	/* DRAM Bank #1 */
 
@@ -73,8 +59,6 @@
 
 
 /* I2C Configuration */
-#define CONFIG_I2C
-#define CONFIG_SYS_I2C
 
 /* Defines for SPL */
 #define CONFIG_SPL_MAX_SIZE		(SRAM_SCRATCH_SPACE_ADDR - \
@@ -85,14 +69,6 @@
 
 #define CONFIG_SPL_FS_LOAD_PAYLOAD_NAME	"u-boot.img"
 
-#define CONFIG_SYS_NAND_ONFI_DETECTION
-#define CONFIG_SYS_NAND_5_ADDR_CYCLE
-#define CONFIG_SYS_NAND_PAGE_COUNT	(CONFIG_SYS_NAND_BLOCK_SIZE / \
-					 CONFIG_SYS_NAND_PAGE_SIZE)
-#define CONFIG_SYS_NAND_PAGE_SIZE	2048
-#define CONFIG_SYS_NAND_OOBSIZE		64
-#define CONFIG_SYS_NAND_BLOCK_SIZE	(128*1024)
-#define CONFIG_SYS_NAND_BAD_BLOCK_POS	NAND_LARGE_BADBLOCK_POS
 #define CONFIG_SYS_NAND_ECCPOS		{ 2, 3, 4, 5, 6, 7, 8, 9, \
 					 10, 11, 12, 13, 14, 15, 16, 17, \
 					 18, 19, 20, 21, 22, 23, 24, 25, \
@@ -103,15 +79,12 @@
 
 #define CONFIG_SYS_NAND_ECCSIZE		512
 #define CONFIG_SYS_NAND_ECCBYTES	14
-#define CONFIG_NAND_OMAP_ECCSCHEME	OMAP_ECC_BCH8_CODE_HW
 
 #define CONFIG_SYS_NAND_ECCSTEPS	4
 #define	CONFIG_SYS_NAND_ECCTOTAL	(CONFIG_SYS_NAND_ECCBYTES * \
 						CONFIG_SYS_NAND_ECCSTEPS)
 
 #define	CONFIG_SYS_NAND_U_BOOT_START	CONFIG_SYS_TEXT_BASE
-
-#define CONFIG_SYS_NAND_U_BOOT_OFFS	0x80000
 
 /*
  * 1MB into the SDRAM to allow for SPL's bss at the beginning of SDRAM
@@ -126,24 +99,13 @@
  * Since SPL did pll and ddr initialization for us,
  * we don't need to do it twice.
  */
-#ifndef CONFIG_SPL_BUILD
-#define CONFIG_SKIP_LOWLEVEL_INIT
-#endif
 
 #ifndef CONFIG_SPL_BUILD
-/*
- * USB configuration
- */
-#define CONFIG_AM335X_USB0
-#define CONFIG_AM335X_USB0_MODE	MUSB_PERIPHERAL
-#define CONFIG_AM335X_USB1
-#define CONFIG_AM335X_USB1_MODE MUSB_HOST
 
 /* USB DRACO ID as default */
 #define CONFIG_USBD_HS
 
 /* USB Device Firmware Update support */
-#define CONFIG_SYS_DFU_DATA_BUF_SIZE	(1 << 20)
 #define DFU_MANIFEST_POLL_TIMEOUT	25000
 
 #endif /* CONFIG_SPL_BUILD */
@@ -160,8 +122,6 @@
  * 0xE0000 - 0x442000 : Linux Kernel
  * 0x442000 - 0x800000 : Userland
  */
-
-#define CONFIG_NET_RETRY_COUNT         10
 
 /* NAND support */
 #ifdef CONFIG_MTD_RAW_NAND
@@ -441,9 +401,5 @@
 #define CONFIG_SYS_ENV_SECT_SIZE	(128 << 10)	/* 128 KiB */
 #endif
 #endif
-
-/* Reboot after 60 sec if bootcmd fails */
-#define CONFIG_RESET_TO_RETRY
-#define CONFIG_BOOT_RETRY_TIME 60
 
 #endif	/* ! __CONFIG_SIEMENS_AM33X_COMMON_H */

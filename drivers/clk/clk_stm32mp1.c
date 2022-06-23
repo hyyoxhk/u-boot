@@ -17,6 +17,7 @@
 #include <time.h>
 #include <vsprintf.h>
 #include <asm/arch/sys_proto.h>
+#include <asm/global_data.h>
 #include <dm/device_compat.h>
 #include <dt-bindings/clock/stm32mp1-clks.h>
 #include <dt-bindings/clock/stm32mp1-clksrc.h>
@@ -26,11 +27,9 @@
 
 DECLARE_GLOBAL_DATA_PTR;
 
-#ifndef CONFIG_TFABOOT
-#if !defined(CONFIG_SPL) || defined(CONFIG_SPL_BUILD)
+#if defined(CONFIG_SPL_BUILD)
 /* activate clock tree initialization in the driver */
 #define STM32MP1_CLOCK_TREE_INIT
-#endif
 #endif
 
 #define MAX_HSI_HZ		64000000
@@ -72,6 +71,7 @@ DECLARE_GLOBAL_DATA_PTR;
 #define RCC_PLL2FRACR		0xA0
 #define RCC_PLL2CSGR		0xA4
 #define RCC_I2C46CKSELR		0xC0
+#define RCC_SPI6CKSELR		0xC4
 #define RCC_CPERCKSELR		0xD0
 #define RCC_STGENCKSELR		0xD4
 #define RCC_DDRITFCR		0xD8
@@ -102,6 +102,7 @@ DECLARE_GLOBAL_DATA_PTR;
 #define RCC_I2C12CKSELR		0x8C0
 #define RCC_I2C35CKSELR		0x8C4
 #define RCC_SPI2S1CKSELR	0x8D8
+#define RCC_SPI2S23CKSELR	0x8DC
 #define RCC_SPI45CKSELR		0x8E0
 #define RCC_UART6CKSELR		0x8E4
 #define RCC_UART24CKSELR	0x8E8
@@ -249,7 +250,7 @@ DECLARE_GLOBAL_DATA_PTR;
 enum stm32mp1_parent_id {
 /*
  * _HSI, _HSE, _CSI, _LSI, _LSE should not be moved
- * they are used as index in osc[] as entry point
+ * they are used as index in osc_clk[] as clock reference
  */
 	_HSI,
 	_HSE,
@@ -312,7 +313,9 @@ enum stm32mp1_parent_sel {
 	_DSI_SEL,
 	_ADC12_SEL,
 	_SPI1_SEL,
+	_SPI23_SEL,
 	_SPI45_SEL,
+	_SPI6_SEL,
 	_RTC_SEL,
 	_PARENT_SEL_NB,
 	_UNKNOWN_SEL = 0xff,
@@ -429,8 +432,7 @@ struct stm32mp1_clk_data {
 struct stm32mp1_clk_priv {
 	fdt_addr_t base;
 	const struct stm32mp1_clk_data *data;
-	ulong osc[NB_OSC];
-	struct udevice *osc_dev[NB_OSC];
+	struct clk osc_clk[NB_OSC];
 };
 
 #define STM32MP1_CLK(off, b, idx, s)		\
@@ -524,6 +526,8 @@ static const struct stm32mp1_clk_gate stm32mp1_clk_gate[] = {
 	STM32MP1_CLK(RCC_DDRITFCR, 9, DDRPHYCAPB, _UNKNOWN_SEL),
 	STM32MP1_CLK(RCC_DDRITFCR, 10, DDRPHYCAPBLP, _UNKNOWN_SEL),
 
+	STM32MP1_CLK_SET_CLR(RCC_MP_APB1ENSETR, 11, SPI2_K, _SPI23_SEL),
+	STM32MP1_CLK_SET_CLR(RCC_MP_APB1ENSETR, 12, SPI3_K, _SPI23_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB1ENSETR, 14, USART2_K, _UART24_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB1ENSETR, 15, USART3_K, _UART35_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB1ENSETR, 16, UART4_K, _UART24_SEL),
@@ -536,10 +540,12 @@ static const struct stm32mp1_clk_gate stm32mp1_clk_gate[] = {
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB1ENSETR, 24, I2C5_K, _I2C35_SEL),
 
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB2ENSETR, 8, SPI1_K, _SPI1_SEL),
+	STM32MP1_CLK_SET_CLR(RCC_MP_APB2ENSETR, 9, SPI4_K, _SPI45_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB2ENSETR, 10, SPI5_K, _SPI45_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB2ENSETR, 13, USART6_K, _UART6_SEL),
 
 	STM32MP1_CLK_SET_CLR_F(RCC_MP_APB3ENSETR, 13, VREF, _PCLK3),
+	STM32MP1_CLK_SET_CLR_F(RCC_MP_APB3ENSETR, 11, SYSCFG, _UNKNOWN_SEL),
 
 	STM32MP1_CLK_SET_CLR_F(RCC_MP_APB4ENSETR, 0, LTDC_PX, _PLL4_Q),
 	STM32MP1_CLK_SET_CLR_F(RCC_MP_APB4ENSETR, 4, DSI_PX, _PLL4_Q),
@@ -548,8 +554,11 @@ static const struct stm32mp1_clk_gate stm32mp1_clk_gate[] = {
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB4ENSETR, 15, IWDG2, _UNKNOWN_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB4ENSETR, 16, USBPHY_K, _USBPHY_SEL),
 
+	STM32MP1_CLK_SET_CLR(RCC_MP_APB5ENSETR, 0, SPI6_K, _SPI6_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB5ENSETR, 2, I2C4_K, _I2C46_SEL),
+	STM32MP1_CLK_SET_CLR(RCC_MP_APB5ENSETR, 3, I2C6_K, _I2C46_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB5ENSETR, 8, RTCAPB, _PCLK5),
+	STM32MP1_CLK_SET_CLR(RCC_MP_APB5ENSETR, 16, BSEC, _UNKNOWN_SEL),
 	STM32MP1_CLK_SET_CLR(RCC_MP_APB5ENSETR, 20, STGEN_K, _STGEN_SEL),
 
 	STM32MP1_CLK_SET_CLR_F(RCC_MP_AHB2ENSETR, 5, ADC12, _HCLK2),
@@ -611,10 +620,13 @@ static const u8 usbo_parents[] = {_PLL4_R, _USB_PHY_48};
 static const u8 stgen_parents[] = {_HSI_KER, _HSE_KER};
 static const u8 dsi_parents[] = {_DSI_PHY, _PLL4_P};
 static const u8 adc_parents[] = {_PLL4_R, _CK_PER, _PLL3_Q};
+/* same parents for SPI1=RCC_SPI2S1CKSELR and SPI2&3 = RCC_SPI2S23CKSELR */
 static const u8 spi_parents[] = {_PLL4_P, _PLL3_Q, _I2S_CKIN, _CK_PER,
 				 _PLL3_R};
 static const u8 spi45_parents[] = {_PCLK2, _PLL4_Q, _HSI_KER, _CSI_KER,
 				   _HSE_KER};
+static const u8 spi6_parents[] = {_PCLK5, _PLL4_Q, _HSI_KER, _CSI_KER,
+				  _HSE_KER, _PLL3_Q};
 static const u8 rtc_parents[] = {_UNKNOWN_ID, _LSE, _LSI, _HSE};
 
 static const struct stm32mp1_clk_sel stm32mp1_clk_sel[_PARENT_SEL_NB] = {
@@ -641,7 +653,9 @@ static const struct stm32mp1_clk_sel stm32mp1_clk_sel[_PARENT_SEL_NB] = {
 	STM32MP1_CLK_PARENT(_DSI_SEL, RCC_DSICKSELR, 0, 0x1, dsi_parents),
 	STM32MP1_CLK_PARENT(_ADC12_SEL, RCC_ADCCKSELR, 0, 0x3, adc_parents),
 	STM32MP1_CLK_PARENT(_SPI1_SEL, RCC_SPI2S1CKSELR, 0, 0x7, spi_parents),
+	STM32MP1_CLK_PARENT(_SPI23_SEL, RCC_SPI2S23CKSELR, 0, 0x7, spi_parents),
 	STM32MP1_CLK_PARENT(_SPI45_SEL, RCC_SPI45CKSELR, 0, 0x7, spi45_parents),
+	STM32MP1_CLK_PARENT(_SPI6_SEL, RCC_SPI6CKSELR, 0, 0x7, spi6_parents),
 	STM32MP1_CLK_PARENT(_RTC_SEL, RCC_BDCR, RCC_BDCR_RTCSRC_SHIFT,
 			    (RCC_BDCR_RTCSRC_MASK >> RCC_BDCR_RTCSRC_SHIFT),
 			    rtc_parents),
@@ -788,7 +802,7 @@ static ulong stm32mp1_clk_get_fixed(struct stm32mp1_clk_priv *priv, int idx)
 		return 0;
 	}
 
-	return priv->osc[idx];
+	return clk_get_rate(&priv->osc_clk[idx]);
 }
 
 static int stm32mp1_clk_get_id(struct stm32mp1_clk_priv *priv, unsigned long id)
@@ -1543,7 +1557,7 @@ static int stm32mp1_hsidiv(fdt_addr_t rcc, ulong hsifreq)
 			break;
 
 	if (hsidiv == 4) {
-		log_err("clk-hsi frequency invalid");
+		log_err("hsi frequency invalid");
 		return -1;
 	}
 
@@ -1950,13 +1964,13 @@ static int stm32mp1_clktree(struct udevice *dev)
 	 * switch ON oscillator found in device-tree,
 	 * HSI already ON after bootrom
 	 */
-	if (priv->osc[_LSI])
+	if (clk_valid(&priv->osc_clk[_LSI]))
 		stm32mp1_lsi_set(rcc, 1);
 
-	if (priv->osc[_LSE]) {
+	if (clk_valid(&priv->osc_clk[_LSE])) {
 		int bypass, digbyp;
 		u32 lsedrv;
-		struct udevice *dev = priv->osc_dev[_LSE];
+		struct udevice *dev = priv->osc_clk[_LSE].dev;
 
 		bypass = dev_read_bool(dev, "st,bypass");
 		digbyp = dev_read_bool(dev, "st,digbypass");
@@ -1967,9 +1981,9 @@ static int stm32mp1_clktree(struct udevice *dev)
 		stm32mp1_lse_enable(rcc, bypass, digbyp, lsedrv);
 	}
 
-	if (priv->osc[_HSE]) {
+	if (clk_valid(&priv->osc_clk[_HSE])) {
 		int bypass, digbyp, css;
-		struct udevice *dev = priv->osc_dev[_HSE];
+		struct udevice *dev = priv->osc_clk[_HSE].dev;
 
 		bypass = dev_read_bool(dev, "st,bypass");
 		digbyp = dev_read_bool(dev, "st,digbypass");
@@ -1994,8 +2008,8 @@ static int stm32mp1_clktree(struct udevice *dev)
 
 	/* configure HSIDIV */
 	dev_dbg(dev, "configure HSIDIV\n");
-	if (priv->osc[_HSI]) {
-		stm32mp1_hsidiv(rcc, priv->osc[_HSI]);
+	if (clk_valid(&priv->osc_clk[_HSI])) {
+		stm32mp1_hsidiv(rcc, clk_get_rate(&priv->osc_clk[_HSI]));
 		stgen_config(priv);
 	}
 
@@ -2041,7 +2055,7 @@ static int stm32mp1_clktree(struct udevice *dev)
 	}
 
 	/* wait LSE ready before to use it */
-	if (priv->osc[_LSE])
+	if (clk_valid(&priv->osc_clk[_LSE]))
 		stm32mp1_lse_wait(rcc);
 
 	/* configure with expected clock source */
@@ -2080,7 +2094,7 @@ static int stm32mp1_clktree(struct udevice *dev)
 
 	dev_dbg(dev, "oscillator off\n");
 	/* switch OFF HSI if not found in device-tree */
-	if (!priv->osc[_HSI])
+	if (!clk_valid(&priv->osc_clk[_HSI]))
 		stm32mp1_hsi_set(rcc, 0);
 
 	/* Software Self-Refresh mode (SSR) during DDR initilialization */
@@ -2176,40 +2190,25 @@ static ulong stm32mp1_clk_set_rate(struct clk *clk, unsigned long clk_rate)
 	return -EINVAL;
 }
 
-static void stm32mp1_osc_clk_init(const char *name,
-				  struct stm32mp1_clk_priv *priv,
-				  int index)
-{
-	struct clk clk;
-	struct udevice *dev = NULL;
-
-	priv->osc[index] = 0;
-	clk.id = 0;
-	if (!uclass_get_device_by_name(UCLASS_CLK, name, &dev)) {
-		if (clk_request(dev, &clk))
-			log_err("%s request", name);
-		else
-			priv->osc[index] = clk_get_rate(&clk);
-	}
-	priv->osc_dev[index] = dev;
-}
-
 static void stm32mp1_osc_init(struct udevice *dev)
 {
 	struct stm32mp1_clk_priv *priv = dev_get_priv(dev);
 	int i;
 	const char *name[NB_OSC] = {
-		[_LSI] = "clk-lsi",
-		[_LSE] = "clk-lse",
-		[_HSI] = "clk-hsi",
-		[_HSE] = "clk-hse",
-		[_CSI] = "clk-csi",
+		[_LSI] = "lsi",
+		[_LSE] = "lse",
+		[_HSI] = "hsi",
+		[_HSE] = "hse",
+		[_CSI] = "csi",
 		[_I2S_CKIN] = "i2s_ckin",
 	};
 
 	for (i = 0; i < NB_OSC; i++) {
-		stm32mp1_osc_clk_init(name[i], priv, i);
-		dev_dbg(dev, "%d: %s => %x\n", i, name[i], (u32)priv->osc[i]);
+		if (clk_get_by_name(dev, name[i], &priv->osc_clk[i]))
+			dev_dbg(dev, "No source clock \"%s\"\n", name[i]);
+		else
+			dev_dbg(dev, "%s clock rate: %luHz\n",
+				name[i], clk_get_rate(&priv->osc_clk[i]));
 	}
 }
 

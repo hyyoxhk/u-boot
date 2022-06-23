@@ -14,7 +14,6 @@
 #include <linux/stringify.h>
 
 #include <asm/config_mpc85xx.h>
-#define CONFIG_NAND_FSL_IFC
 
 #ifdef CONFIG_SDCARD
 #define CONFIG_SPL_FLUSH_IMAGE
@@ -64,19 +63,16 @@
 #define CONFIG_SYS_NAND_U_BOOT_SIZE	((768 << 10) - 0x2000)
 #define CONFIG_SYS_NAND_U_BOOT_DST	(0x00200000 - CONFIG_SPL_MAX_SIZE)
 #define CONFIG_SYS_NAND_U_BOOT_START	0x00200000
-#define CONFIG_SYS_NAND_U_BOOT_OFFS	0
 #else
 #ifdef CONFIG_TPL_BUILD
 #define CONFIG_SPL_FLUSH_IMAGE
 #define CONFIG_SPL_NAND_INIT
 #define CONFIG_SPL_COMMON_INIT_DDR
 #define CONFIG_SPL_MAX_SIZE		(128 << 10)
-#define CONFIG_TPL_TEXT_BASE		0xD0001000
 #define CONFIG_SYS_MPC85XX_NO_RESETVEC
 #define CONFIG_SYS_NAND_U_BOOT_SIZE	(576 << 10)
 #define CONFIG_SYS_NAND_U_BOOT_DST	(0x11000000)
 #define CONFIG_SYS_NAND_U_BOOT_START	(0x11000000)
-#define CONFIG_SYS_NAND_U_BOOT_OFFS	((128 + 128) << 10)
 #elif defined(CONFIG_SPL_BUILD)
 #define CONFIG_SPL_INIT_MINIMAL
 #define CONFIG_SPL_NAND_MINIMAL
@@ -85,7 +81,10 @@
 #define CONFIG_SYS_NAND_U_BOOT_SIZE	(128 << 10)
 #define CONFIG_SYS_NAND_U_BOOT_DST	0xD0000000
 #define CONFIG_SYS_NAND_U_BOOT_START	0xD0000000
-#define CONFIG_SYS_NAND_U_BOOT_OFFS	(128 << 10)
+#else
+#ifndef CONFIG_MPC85XX_HAVE_RESET_VECTOR
+#define CONFIG_SYS_MPC85XX_NO_RESETVEC
+#endif
 #endif
 #define CONFIG_SPL_PAD_TO	0x20000
 #define CONFIG_TPL_PAD_TO	0x20000
@@ -102,21 +101,11 @@
 #define CONFIG_RESET_VECTOR_ADDRESS	0xeffffffc
 #endif
 
-#ifdef CONFIG_TPL_BUILD
-#define CONFIG_SYS_MONITOR_BASE	CONFIG_TPL_TEXT_BASE
-#elif defined(CONFIG_SPL_BUILD)
-#define CONFIG_SYS_MONITOR_BASE	CONFIG_SPL_TEXT_BASE
-#else
-#define CONFIG_SYS_MONITOR_BASE	CONFIG_SYS_TEXT_BASE	/* start of monitor */
-#endif
-
 /* High Level Configuration Options */
-#define CONFIG_SYS_HAS_SERDES		/* common SERDES init code */
 
 #if defined(CONFIG_PCI)
 #define CONFIG_PCIE1			/* PCIE controller 1 (slot 1) */
 #define CONFIG_PCIE2			/* PCIE controller 2 (slot 2) */
-#define CONFIG_SYS_PCI_64BIT		/* enable 64-bit PCI resources */
 
 /*
  * PCI Windows
@@ -150,53 +139,20 @@
 #define CONFIG_SYS_PCIE2_IO_PHYS	0xffc10000
 #endif
 
-#if !defined(CONFIG_DM_PCI)
-#define CONFIG_FSL_PCI_INIT		/* Use common FSL init code */
-#define CONFIG_PCI_INDIRECT_BRIDGE	/* indirect PCI bridge support */
-#define CONFIG_SYS_PCIE1_NAME		"mini PCIe Slot"
-#ifdef CONFIG_PHYS_64BIT
-#define CONFIG_SYS_PCIE1_MEM_BUS	0x80000000
-#else
-#define CONFIG_SYS_PCIE1_MEM_BUS	0x80000000
-#endif
-#define CONFIG_SYS_PCIE1_MEM_SIZE	0x20000000	/* 512M */
-#define CONFIG_SYS_PCIE1_IO_BUS		0x00000000
-#define CONFIG_SYS_PCIE1_IO_SIZE	0x00010000	/* 64k */
-
-#if defined(CONFIG_TARGET_P1010RDB_PA)
-#define CONFIG_SYS_PCIE2_NAME		"PCIe Slot"
-#elif defined(CONFIG_TARGET_P1010RDB_PB)
-#define CONFIG_SYS_PCIE2_NAME		"mini PCIe Slot"
-#endif
-#ifdef CONFIG_PHYS_64BIT
-#define CONFIG_SYS_PCIE2_MEM_BUS	0xc0000000
-#else
-#define CONFIG_SYS_PCIE2_MEM_BUS	0xa0000000
-#endif
-#define CONFIG_SYS_PCIE2_MEM_SIZE	0x20000000	/* 512M */
-#define CONFIG_SYS_PCIE2_IO_BUS		0x00000000
-#define CONFIG_SYS_PCIE2_IO_SIZE	0x00010000	/* 64k */
-#endif
-
 #define CONFIG_PCI_SCAN_SHOW		/* show pci devices on startup */
 #endif
-
-#define CONFIG_DDR_CLK_FREQ	66666666 /* DDRCLK on P1010 RDB */
-#define CONFIG_SYS_CLK_FREQ	66666666 /* SYSCLK for P1010 RDB */
 
 #define CONFIG_HWCONFIG
 /*
  * These can be toggled for performance analysis, otherwise use default.
  */
 #define CONFIG_L2_CACHE			/* toggle L2 cache */
-#define CONFIG_BTB			/* toggle branch predition */
 
 
 #define CONFIG_ENABLE_36BIT_PHYS
 
 /* DDR Setup */
 #define CONFIG_SYS_DDR_RAW_TIMING
-#define CONFIG_DDR_SPD
 #define CONFIG_SYS_SPD_BUS_NUM		1
 #define SPD_EEPROM_ADDRESS		0x52
 
@@ -208,9 +164,6 @@ extern unsigned long get_sdram_size(void);
 #define CONFIG_SYS_SDRAM_SIZE		get_sdram_size() /* DDR size */
 #define CONFIG_SYS_DDR_SDRAM_BASE	0x00000000
 #define CONFIG_SYS_SDRAM_BASE		CONFIG_SYS_DDR_SDRAM_BASE
-
-#define CONFIG_DIMM_SLOTS_PER_CTLR	1
-#define CONFIG_CHIP_SELECTS_PER_CTRL	1
 
 /* DDR3 Controller Settings */
 #define CONFIG_SYS_DDR_CS0_BNDS		0x0000003f
@@ -306,7 +259,6 @@ extern unsigned long get_sdram_size(void);
 #define CONFIG_SYS_FLASH_BANKS_LIST	{CONFIG_SYS_FLASH_BASE_PHYS}
 #define CONFIG_SYS_FLASH_QUIET_TEST
 #define CONFIG_FLASH_SHOW_PROGRESS	45	/* count down from 45/5: 9..1 */
-#define CONFIG_SYS_MAX_FLASH_BANKS	1	/* number of banks */
 
 #undef CONFIG_SYS_FLASH_CHECKSUM
 #define CONFIG_SYS_FLASH_ERASE_TOUT	60000	/* Flash Erase Timeout (ms) */
@@ -339,10 +291,8 @@ extern unsigned long get_sdram_size(void);
 				| CSOR_NAND_PGS_512	/* Page Size = 512b */ \
 				| CSOR_NAND_SPRZ_16	/* Spare size = 16 */ \
 				| CSOR_NAND_PB(32))	/* 32 Pages Per Block */
-#define CONFIG_SYS_NAND_BLOCK_SIZE	(16 * 1024)
 
 #elif defined(CONFIG_TARGET_P1010RDB_PB)
-#define CONFIG_SYS_NAND_ONFI_DETECTION
 #define CONFIG_SYS_NAND_CSOR   (CSOR_NAND_ECC_ENC_EN   /* ECC on encode */ \
 				| CSOR_NAND_ECC_DEC_EN  /* ECC on decode */ \
 				| CSOR_NAND_ECC_MODE_4  /* 4-bit ECC */ \
@@ -350,7 +300,6 @@ extern unsigned long get_sdram_size(void);
 				| CSOR_NAND_PGS_4K      /* Page Size = 4K */ \
 				| CSOR_NAND_SPRZ_224    /* Spare size = 224 */ \
 				| CSOR_NAND_PB(128))  /*Pages Per Block = 128 */
-#define CONFIG_SYS_NAND_BLOCK_SIZE     (512 * 1024)
 #endif
 
 #define CONFIG_SYS_NAND_BASE_LIST	{ CONFIG_SYS_NAND_BASE }
@@ -456,12 +405,6 @@ extern unsigned long get_sdram_size(void);
 #undef CONFIG_SYS_RAMBOOT
 #endif
 
-#ifdef CONFIG_SYS_FSL_ERRATUM_IFC_A003399
-#if !defined(CONFIG_SPL) && !defined(CONFIG_SYS_RAMBOOT)
-#define CONFIG_A003399_NOR_WORKAROUND
-#endif
-#endif
-
 #define CONFIG_SYS_INIT_RAM_LOCK
 #define CONFIG_SYS_INIT_RAM_ADDR	0xffd00000 /* stack in RAM */
 #define CONFIG_SYS_INIT_RAM_SIZE	0x00004000 /* End of used area in RAM */
@@ -471,7 +414,6 @@ extern unsigned long get_sdram_size(void);
 #define CONFIG_SYS_INIT_SP_OFFSET	CONFIG_SYS_GBL_DATA_OFFSET
 
 #define CONFIG_SYS_MONITOR_LEN		(768 * 1024)
-#define CONFIG_SYS_MALLOC_LEN		(1024 * 1024)	/* Reserved for malloc*/
 
 /*
  * Config the L2 Cache as L2 SRAM
@@ -525,38 +467,19 @@ extern unsigned long get_sdram_size(void);
 #define CONFIG_SYS_NS16550_COM2	(CONFIG_SYS_CCSRBAR+0x4600)
 
 /* I2C */
-#ifndef CONFIG_DM_I2C
-#define CONFIG_SYS_I2C
-#define CONFIG_SYS_FSL_I2C_SPEED	400000
-#define CONFIG_SYS_FSL_I2C_SLAVE	0x7F
-#define CONFIG_SYS_FSL_I2C_OFFSET	0x3000
-#define CONFIG_SYS_FSL_I2C2_SPEED	400000
-#define CONFIG_SYS_FSL_I2C2_SLAVE	0x7F
-#define CONFIG_SYS_FSL_I2C2_OFFSET	0x3100
-#else
-#define CONFIG_I2C_SET_DEFAULT_BUS_NUM
-#define CONFIG_I2C_DEFAULT_BUS_NUMBER	0
-#endif
 #define I2C_PCA9557_ADDR1		0x18
 #define I2C_PCA9557_ADDR2		0x19
 #define I2C_PCA9557_BUS_NUM		0
-#define CONFIG_SYS_I2C_FSL
 
 /* I2C EEPROM */
 #if defined(CONFIG_TARGET_P1010RDB_PB)
-#define CONFIG_ID_EEPROM
 #ifdef CONFIG_ID_EEPROM
 #define CONFIG_SYS_I2C_EEPROM_NXID
 #endif
-#define CONFIG_SYS_I2C_EEPROM_ADDR_LEN	1
-#define CONFIG_SYS_I2C_EEPROM_ADDR	0x57
 #define CONFIG_SYS_EEPROM_BUS_NUM	0
 #define MAX_NUM_PORTS			9 /* for 128Bytes EEPROM */
 #endif
 /* enable read and write access to EEPROM */
-#define CONFIG_SYS_I2C_EEPROM_ADDR_LEN 1
-#define CONFIG_SYS_EEPROM_PAGE_WRITE_BITS 3
-#define CONFIG_SYS_EEPROM_PAGE_WRITE_DELAY_MS 5
 
 /* RTC */
 #define CONFIG_RTC_PT7C4338
@@ -591,8 +514,6 @@ extern unsigned long get_sdram_size(void);
 #define TSEC2_PHYIDX		0
 #define TSEC3_PHYIDX		0
 
-#define CONFIG_ETHPRIME		"eTSEC1"
-
 /* TBI PHY configuration for SGMII mode */
 #define CONFIG_TSEC_TBICR_SETTINGS ( \
 		TBICR_PHY_RESET \
@@ -607,7 +528,6 @@ extern unsigned long get_sdram_size(void);
 #define CONFIG_FSL_SATA_V2
 
 #ifdef CONFIG_FSL_SATA
-#define CONFIG_SYS_SATA_MAX_DEVICE	2
 #define CONFIG_SATA1
 #define CONFIG_SYS_SATA1		CONFIG_SYS_MPC85xx_SATA1_ADDR
 #define CONFIG_SYS_SATA1_FLAGS		FLAGS_DMA
@@ -627,7 +547,6 @@ extern unsigned long get_sdram_size(void);
 #if defined(CONFIG_HAS_FSL_DR_USB)
 #ifdef CONFIG_USB_EHCI_HCD
 #define CONFIG_EHCI_HCD_INIT_AFTER_RESET
-#define CONFIG_USB_EHCI_FSL
 #endif
 #endif
 
@@ -651,8 +570,6 @@ extern unsigned long get_sdram_size(void);
 #define CONFIG_LOADS_ECHO		/* echo on for serial download */
 #define CONFIG_SYS_LOADS_BAUD_CHANGE	/* allow baudrate change */
 
-#undef CONFIG_WATCHDOG			/* watchdog disabled */
-
 #if defined(CONFIG_MMC) || defined(CONFIG_USB_EHCI_HCD) \
 		 || defined(CONFIG_FSL_SATA)
 #endif
@@ -660,7 +577,6 @@ extern unsigned long get_sdram_size(void);
 /*
  * Miscellaneous configurable options
  */
-#define CONFIG_SYS_LOAD_ADDR	0x2000000	/* default load address */
 
 /*
  * For booting Linux, the board info and command line data
@@ -670,26 +586,12 @@ extern unsigned long get_sdram_size(void);
 #define CONFIG_SYS_BOOTMAPSZ	(64 << 20) /* Initial Memory map for Linux */
 #define CONFIG_SYS_BOOTM_LEN	(64 << 20) /* Increase max gunzip size */
 
-#if defined(CONFIG_CMD_KGDB)
-#define CONFIG_KGDB_BAUDRATE	230400	/* speed to run kgdb serial port */
-#endif
-
 /*
  * Environment Configuration
  */
 
-#if defined(CONFIG_TSEC_ENET)
-#define CONFIG_HAS_ETH0
-#define CONFIG_HAS_ETH1
-#define CONFIG_HAS_ETH2
-#endif
-
 #define CONFIG_ROOTPATH		"/opt/nfsroot"
-#define CONFIG_BOOTFILE		"uImage"
 #define CONFIG_UBOOTPATH	u-boot.bin/* U-Boot image on TFTP server */
-
-/* default location for tftp and bootm */
-#define CONFIG_LOADADDR		1000000
 
 #define	CONFIG_EXTRA_ENV_SETTINGS				\
 	"hwconfig=" __stringify(CONFIG_DEF_HWCONFIG)  "\0"	\
@@ -718,10 +620,10 @@ extern unsigned long get_sdram_size(void);
 	"ext2load usb 0:4 $fdtaddr $fdtfile;"	\
 	"ext2load usb 0:4 $ramdiskaddr $ramdiskfile;"	\
 	"bootm $loadaddr $ramdiskaddr $fdtaddr\0"	\
-	CONFIG_BOOTMODE
+	BOOTMODE
 
 #if defined(CONFIG_TARGET_P1010RDB_PA)
-#define CONFIG_BOOTMODE \
+#define BOOTMODE \
 	"boot_bank0=i2c dev 0; i2c mw 18 1 f1; i2c mw 18 3 f0;" \
 	"mw.b ffb00011 0; mw.b ffb00009 0; reset\0" \
 	"boot_bank1=i2c dev 0; i2c mw 18 1 f1; i2c mw 18 3 f0;" \
@@ -730,7 +632,7 @@ extern unsigned long get_sdram_size(void);
 	"mw.b ffb00011 0; mw.b ffb00017 1; reset\0"
 
 #elif defined(CONFIG_TARGET_P1010RDB_PB)
-#define CONFIG_BOOTMODE \
+#define BOOTMODE \
 	"boot_bank0=i2c dev 0; i2c mw 18 1 fe; i2c mw 18 3 0;" \
 	"i2c mw 19 1 2; i2c mw 19 3 e1; reset\0" \
 	"boot_bank1=i2c dev 0; i2c mw 18 1 fe; i2c mw 18 3 0;" \
@@ -742,16 +644,6 @@ extern unsigned long get_sdram_size(void);
 	"boot_sd=i2c dev 0; i2c mw 18 1 f8; i2c mw 18 3 0;" \
 	"i2c mw 19 1 4; i2c mw 19 3 f3; reset\0"
 #endif
-
-#define CONFIG_RAMBOOTCOMMAND		\
-	"setenv bootargs root=/dev/ram rw "	\
-	"console=$consoledev,$baudrate $othbootargs; "	\
-	"tftp $ramdiskaddr $ramdiskfile;"	\
-	"tftp $loadaddr $bootfile;"		\
-	"tftp $fdtaddr $fdtfile;"		\
-	"bootm $loadaddr $ramdiskaddr $fdtaddr"
-
-#define CONFIG_BOOTCOMMAND CONFIG_RAMBOOTCOMMAND
 
 #include <asm/fsl_secure_boot.h>
 

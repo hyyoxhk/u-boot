@@ -84,6 +84,7 @@
 #include <cli.h>
 #include <cli_hush.h>
 #include <command.h>        /* find_cmd */
+#include <asm/global_data.h>
 #endif
 #ifndef __U_BOOT__
 #include <ctype.h>     /* isalpha, isdigit */
@@ -1672,7 +1673,7 @@ static int run_pipe_real(struct pipe *pi)
 			return -1;
 		}
 		/* Process the command */
-		return cmd_process(flag, child->argc, child->argv,
+		return cmd_process(flag, child->argc - i, child->argv + i,
 				   &flag_repeat, NULL);
 #endif
 	}
@@ -3324,7 +3325,7 @@ static void *xmalloc(size_t size)
 	void *p = NULL;
 
 	if (!(p = malloc(size))) {
-	    printf("ERROR : memory not allocated\n");
+	    printf("ERROR : xmalloc failed\n");
 	    for(;;);
 	}
 	return p;
@@ -3335,7 +3336,7 @@ static void *xrealloc(void *ptr, size_t size)
 	void *p = NULL;
 
 	if (!(p = realloc(ptr, size))) {
-	    printf("ERROR : memory not allocated\n");
+	    printf("ERROR : xrealloc failed\n");
 	    for(;;);
 	}
 	return p;

@@ -6,6 +6,7 @@
  */
 
 #include <malloc.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <common.h>
 #include <clk.h>
@@ -49,6 +50,10 @@ static int at91_i2c_xfer_msg(struct at91_i2c_bus *bus, struct i2c_msg *msg)
 	bool is_read = msg->flags & I2C_M_RD;
 	u32 i;
 	int ret = 0;
+
+	/* if there is no message to send/receive, just exit quietly */
+	if (msg->len == 0)
+		return ret;
 
 	readl(&reg->sr);
 	if (is_read) {
@@ -300,6 +305,11 @@ static const struct at91_i2c_pdata sama5d2_config = {
 	.clk_offset = 3,
 };
 
+static const struct at91_i2c_pdata sam9x60_config = {
+	.clk_max_div = 7,
+	.clk_offset = 3,
+};
+
 static const struct udevice_id at91_i2c_ids[] = {
 { .compatible = "atmel,at91rm9200-i2c", .data = (long)&at91rm9200_config },
 { .compatible = "atmel,at91sam9260-i2c", .data = (long)&at91sam9260_config },
@@ -309,6 +319,7 @@ static const struct udevice_id at91_i2c_ids[] = {
 { .compatible = "atmel,at91sam9x5-i2c", .data = (long)&at91sam9x5_config },
 { .compatible = "atmel,sama5d4-i2c", .data = (long)&sama5d4_config },
 { .compatible = "atmel,sama5d2-i2c", .data = (long)&sama5d2_config },
+{ .compatible = "microchip,sam9x60-i2c", .data = (long)&sam9x60_config },
 { }
 };
 

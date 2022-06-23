@@ -10,6 +10,7 @@
 #include <console.h>
 #include <env_internal.h>
 #include <init.h>
+#include <asm/global_data.h>
 #include <asm/spl.h>
 #include <malloc.h>
 #include <ns16550.h>
@@ -27,16 +28,6 @@ DECLARE_GLOBAL_DATA_PTR;
 phys_size_t get_effective_memsize(void)
 {
 	return CONFIG_SYS_L3_SIZE;
-}
-
-unsigned long get_board_sys_clk(void)
-{
-	return CONFIG_SYS_CLK_FREQ;
-}
-
-unsigned long get_board_ddr_clk(void)
-{
-	return CONFIG_DDR_CLK_FREQ;
 }
 
 void board_init_f(ulong bootflag)

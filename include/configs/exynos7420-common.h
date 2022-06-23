@@ -10,14 +10,10 @@
 
 /* High Level Configuration Options */
 #define CONFIG_SAMSUNG			/* in a SAMSUNG core */
-#define CONFIG_EXYNOS7420		/* Exynos7 Family */
 #define CONFIG_S5P
 
 #include <asm/arch/cpu.h>		/* get chip and board defs */
 #include <linux/sizes.h>
-
-/* Size of malloc() pool before and after relocation */
-#define CONFIG_SYS_MALLOC_LEN		(CONFIG_ENV_SIZE + (80 << 20))
 
 /* Miscellaneous configurable options */
 #define CONFIG_SYS_CBSIZE		1024	/* Console I/O Buffer Size */
@@ -28,12 +24,6 @@
 
 /* select serial console configuration */
 
-/* Timer input clock frequency */
-#define COUNTER_FREQUENCY		24000000
-
-/* Device Tree */
-#define CONFIG_DEVICE_TREE_LIST "exynos7420-espresso7420"
-
 /* IRAM Layout */
 #define CONFIG_IRAM_BASE		0x02100000
 #define CONFIG_IRAM_SIZE		0x58000
@@ -41,8 +31,6 @@
 #define CPU_RELEASE_ADDR		secondary_boot_addr
 
 /* select serial console configuration */
-
-#define CONFIG_SYS_LOAD_ADDR		(CONFIG_SYS_SDRAM_BASE + 0x3E00000)
 
 #define PHYS_SDRAM_1		CONFIG_SYS_SDRAM_BASE
 #define PHYS_SDRAM_1_SIZE	SDRAM_BANK_SIZE

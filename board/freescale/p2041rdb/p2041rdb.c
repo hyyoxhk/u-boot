@@ -4,12 +4,14 @@
  */
 
 #include <common.h>
+#include <clock_legacy.h>
 #include <command.h>
 #include <env.h>
 #include <fdt_support.h>
 #include <image.h>
 #include <init.h>
 #include <netdev.h>
+#include <asm/global_data.h>
 #include <linux/compiler.h>
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -147,7 +149,7 @@ int board_early_init_r(void)
 	return 0;
 }
 
-unsigned long get_board_sys_clk(unsigned long dummy)
+unsigned long get_board_sys_clk(void)
 {
 	u8 sysclk_conf = CPLD_READ(sysclk_sw1);
 

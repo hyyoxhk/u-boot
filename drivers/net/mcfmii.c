@@ -8,13 +8,10 @@
 #include <config.h>
 #include <net.h>
 #include <netdev.h>
+#include <asm/global_data.h>
 #include <linux/delay.h>
 
-#ifdef CONFIG_MCF547x_8x
-#include <asm/fsl_mcdmafec.h>
-#else
 #include <asm/fec.h>
-#endif
 #include <asm/immap.h>
 #include <linux/mii.h>
 
@@ -203,9 +200,7 @@ int mii_discover_phy(fec_info_t *info)
 }
 #endif				/* CONFIG_SYS_DISCOVER_PHY */
 
-void mii_init(void) __attribute__((weak,alias("__mii_init")));
-
-void __mii_init(void)
+__weak void mii_init(void)
 {
 #ifdef CONFIG_DM_ETH
 	struct udevice *dev;

@@ -6,7 +6,9 @@
  */
 
 #include <common.h>
+#include <clock_legacy.h>
 #include <malloc.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <dm.h>
 #include <clk.h>
@@ -50,7 +52,7 @@ static int ostm_probe(struct udevice *dev)
 
 	clk_free(&clk);
 #else
-	uc_priv->clock_rate = CONFIG_SYS_CLK_FREQ / 2;
+	uc_priv->clock_rate = get_board_sys_clk() / 2;
 #endif
 
 	readb(priv->regs + OSTM_CTL);

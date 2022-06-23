@@ -14,6 +14,7 @@
 #include <dm.h>
 #include <dm/platform_data/spi_pl022.h>
 #include <linux/io.h>
+#include <asm/global_data.h>
 #include <spi.h>
 
 #define SSP_CR0		0x000
@@ -285,7 +286,7 @@ static const struct dm_spi_ops pl022_spi_ops = {
 	.cs_info        = pl022_cs_info,
 };
 
-#if !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 static int pl022_spi_of_to_plat(struct udevice *bus)
 {
 	struct pl022_spi_pdata *plat = dev_get_plat(bus);
@@ -314,7 +315,7 @@ static const struct udevice_id pl022_spi_ids[] = {
 U_BOOT_DRIVER(pl022_spi) = {
 	.name   = "pl022_spi",
 	.id     = UCLASS_SPI,
-#if !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 	.of_match = pl022_spi_ids,
 	.of_to_plat = pl022_spi_of_to_plat,
 #endif

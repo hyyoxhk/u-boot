@@ -11,6 +11,7 @@
 #include <malloc.h>
 #include <mmc.h>
 #include <dm.h>
+#include <asm/global_data.h>
 #include <dm/device_compat.h>
 #include <linux/bitops.h>
 #include <linux/compat.h>
@@ -861,6 +862,9 @@ static void renesas_sdhi_filter_caps(struct udevice *dev)
 
 	if (!(priv->caps & TMIO_SD_CAP_RCAR_GEN3))
 		return;
+
+	if (priv->caps & TMIO_SD_CAP_DMA_INTERNAL)
+		priv->idma_bus_width = TMIO_SD_DMA_MODE_BUS_WIDTH;
 
 #if CONFIG_IS_ENABLED(MMC_UHS_SUPPORT) || \
     CONFIG_IS_ENABLED(MMC_HS200_SUPPORT) || \

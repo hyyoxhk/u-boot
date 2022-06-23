@@ -29,7 +29,7 @@
 			u-boot,dm-pre-reloc;
 
 			/* ATSHA204A at address 0x64 */
-			atsha204a@64 {
+			crypto@64 {
 				u-boot,dm-pre-reloc;
 				compatible = "atmel,atsha204a";
 				reg = <0x64>;
@@ -38,16 +38,26 @@
 	};
 };
 
+#ifdef CONFIG_ENV_IS_IN_SPI_FLASH
 &spi0 {
 	u-boot,dm-pre-reloc;
 
-	spi-flash@0 {
-		compatible = "jedec,spi-nor";
-		reg = <0>;
-		spi-max-frequency = <40000000>;
+	spi-nor@0 {
 		u-boot,dm-pre-reloc;
+
+		partitions {
+			partition@0 {
+				reg = <0x0 CONFIG_ENV_OFFSET>;
+			};
+
+			partition@f0000 {
+				reg = <CONFIG_ENV_OFFSET CONFIG_ENV_SIZE>;
+				label = "u-boot-env";
+			};
+		};
 	};
 };
+#endif
 
 &uart0 {
 	u-boot,dm-pre-reloc;

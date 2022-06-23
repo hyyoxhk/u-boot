@@ -286,7 +286,7 @@ U_BOOT_DRIVER(regmap_test) = {
 static int dm_test_devm_regmap(struct unit_test_state *uts)
 {
 	int i = 0;
-	u32 val;
+	uint val;
 	u16 pattern[REGMAP_TEST_BUF_SZ];
 	u16 *buffer;
 	struct udevice *dev;
@@ -305,9 +305,8 @@ static int dm_test_devm_regmap(struct unit_test_state *uts)
 					      &dev));
 	priv = dev_get_priv(dev);
 
-	srand(get_ticks() + rand());
 	for (i = 0; i < REGMAP_TEST_BUF_SZ; i++) {
-		pattern[i] = rand();
+		pattern[i] = i * 0x87654321;
 		ut_assertok(regmap_write(priv->cfg_regmap, i, pattern[i]));
 	}
 	for (i = 0; i < REGMAP_TEST_BUF_SZ; i++) {

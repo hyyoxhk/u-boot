@@ -6,11 +6,15 @@
  * Pavel Herrmann <morpheus.ibis@gmail.com>
  */
 
+#define LOG_CATEGORY UCLASS_ROOT
+
 #include <common.h>
 #include <errno.h>
 #include <fdtdec.h>
 #include <log.h>
 #include <malloc.h>
+#include <asm-generic/sections.h>
+#include <asm/global_data.h>
 #include <linux/libfdt.h>
 #include <dm/acpi.h>
 #include <dm/device.h>
@@ -22,6 +26,7 @@
 #include <dm/read.h>
 #include <dm/root.h>
 #include <dm/uclass.h>
+#include <dm/uclass-internal.h>
 #include <dm/util.h>
 #include <linux/list.h>
 
@@ -109,9 +114,6 @@ void fix_uclass(void)
 			entry->init += gd->reloc_off;
 		if (entry->destroy)
 			entry->destroy += gd->reloc_off;
-		/* FIXME maybe also need to fix these ops */
-		if (entry->ops)
-			entry->ops += gd->reloc_off;
 	}
 }
 
@@ -128,19 +130,56 @@ void fix_devices(void)
 	}
 }
 
+static int dm_setup_inst(void)
+{
+	DM_ROOT_NON_CONST = DM_DEVICE_GET(root);
+
+	if (CONFIG_IS_ENABLED(OF_PLATDATA_RT)) {
+		struct udevice_rt *urt;
+		void *start, *end;
+		int each_size;
+		void *base;
+		int n_ents;
+		uint size;
+
+		/* Allocate the udevice_rt table */
+		each_size = dm_udevice_size();
+		start = ll_entry_start(struct udevice, udevice);
+		end = ll_entry_end(struct udevice, udevice);
+		size = end - start;
+		n_ents = size / each_size;
+		urt = calloc(n_ents, sizeof(struct udevice_rt));
+		if (!urt)
+			return log_msg_ret("urt", -ENOMEM);
+		gd_set_dm_udevice_rt(urt);
+
+		/* Now allocate space for the priv/plat data, and copy it in */
+		size = __priv_data_end - __priv_data_start;
+
+		base = calloc(1, size);
+		if (!base)
+			return log_msg_ret("priv", -ENOMEM);
+		memcpy(base, __priv_data_start, size);
+		gd_set_dm_priv_base(base);
+	}
+
+	return 0;
+}
+
 int dm_init(bool of_live)
 {
 	int ret;
-
-	if (IS_ENABLED(CONFIG_OF_TRANSLATE_ZERO_SIZE_CELLS))
-		gd->dm_flags |= GD_DM_FLG_SIZE_CELLS_0;
 
 	if (gd->dm_root) {
 		dm_warn("Virtual root driver already exists!\n");
 		return -EINVAL;
 	}
-	gd->uclass_root = &DM_UCLASS_ROOT_S_NON_CONST;
-	INIT_LIST_HEAD(DM_UCLASS_ROOT_NON_CONST);
+	if (CONFIG_IS_ENABLED(OF_PLATDATA_INST)) {
+		gd->uclass_root = &uclass_head;
+	} else {
+		gd->uclass_root = &DM_UCLASS_ROOT_S_NON_CONST;
+		INIT_LIST_HEAD(DM_UCLASS_ROOT_NON_CONST);
+	}
 
 	if (IS_ENABLED(CONFIG_NEEDS_MANUAL_RELOC)) {
 		fix_drivers();
@@ -148,20 +187,33 @@ int dm_init(bool of_live)
 		fix_devices();
 	}
 
-	ret = device_bind_by_name(NULL, false, &root_info, &DM_ROOT_NON_CONST);
-	if (ret)
-		return ret;
-	if (CONFIG_IS_ENABLED(OF_CONTROL))
-		dev_set_ofnode(DM_ROOT_NON_CONST, ofnode_root());
-	ret = device_probe(DM_ROOT_NON_CONST);
-	if (ret)
-		return ret;
+	if (CONFIG_IS_ENABLED(OF_PLATDATA_INST)) {
+		ret = dm_setup_inst();
+		if (ret) {
+			log_debug("dm_setup_inst() failed: %d\n", ret);
+			return ret;
+		}
+	} else {
+		ret = device_bind_by_name(NULL, false, &root_info,
+					  &DM_ROOT_NON_CONST);
+		if (ret)
+			return ret;
+		if (CONFIG_IS_ENABLED(OF_CONTROL))
+			dev_set_ofnode(DM_ROOT_NON_CONST, ofnode_root());
+		ret = device_probe(DM_ROOT_NON_CONST);
+		if (ret)
+			return ret;
+	}
+
+	INIT_LIST_HEAD((struct list_head *)&gd->dmtag_list);
 
 	return 0;
 }
 
 int dm_uninit(void)
 {
+	/* Remove non-vital devices first */
+	device_remove(dm_root(), DM_REMOVE_NON_VITAL);
 	device_remove(dm_root(), DM_REMOVE_NORMAL);
 	device_unbind(dm_root());
 	gd->dm_root = NULL;
@@ -182,7 +234,7 @@ int dm_scan_plat(bool pre_reloc_only)
 {
 	int ret;
 
-	if (CONFIG_IS_ENABLED(OF_PLATDATA)) {
+	if (CONFIG_IS_ENABLED(OF_PLATDATA_DRIVER_RT)) {
 		struct driver_rt *dyn;
 		int n_ents;
 
@@ -202,7 +254,7 @@ int dm_scan_plat(bool pre_reloc_only)
 	return ret;
 }
 
-#if CONFIG_IS_ENABLED(OF_CONTROL) && !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 /**
  * dm_scan_fdt_node() - Scan the device tree and bind drivers for a node
  *
@@ -213,12 +265,12 @@ int dm_scan_plat(bool pre_reloc_only)
  * @node: Node to scan
  * @pre_reloc_only: If true, bind only drivers with the DM_FLAG_PRE_RELOC
  * flag. If false bind all drivers.
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 static int dm_scan_fdt_node(struct udevice *parent, ofnode parent_node,
 			    bool pre_reloc_only)
 {
-	int ret = 0, err;
+	int ret = 0, err = 0;
 	ofnode node;
 
 	if (!ofnode_valid(parent_node))
@@ -233,7 +285,7 @@ static int dm_scan_fdt_node(struct udevice *parent, ofnode parent_node,
 			pr_debug("   - ignoring disabled device\n");
 			continue;
 		}
-		err = lists_bind_fdt(parent, node, NULL, pre_reloc_only);
+		err = lists_bind_fdt(parent, node, NULL, NULL, pre_reloc_only);
 		if (err && !ret) {
 			ret = err;
 			debug("%s: ret=%d\n", node_name, ret);
@@ -300,6 +352,37 @@ __weak int dm_scan_other(bool pre_reloc_only)
 	return 0;
 }
 
+#if CONFIG_IS_ENABLED(OF_PLATDATA_INST) && CONFIG_IS_ENABLED(READ_ONLY)
+void *dm_priv_to_rw(void *priv)
+{
+	long offset = priv - (void *)__priv_data_start;
+
+	return gd_dm_priv_base() + offset;
+}
+#endif
+
+static int dm_probe_devices(struct udevice *dev, bool pre_reloc_only)
+{
+	u32 mask = DM_FLAG_PROBE_AFTER_BIND;
+	u32 flags = dev_get_flags(dev);
+	struct udevice *child;
+	int ret;
+
+	if (pre_reloc_only)
+		mask |= DM_FLAG_PRE_RELOC;
+
+	if ((flags & mask) == mask) {
+		ret = device_probe(dev);
+		if (ret)
+			return ret;
+	}
+
+	list_for_each_entry(child, &dev->child_head, sibling_node)
+		dm_probe_devices(child, pre_reloc_only);
+
+	return 0;
+}
+
 /**
  * dm_scan() - Scan tables to bind devices
  *
@@ -320,7 +403,7 @@ static int dm_scan(bool pre_reloc_only)
 		return ret;
 	}
 
-	if (CONFIG_IS_ENABLED(OF_CONTROL) && !CONFIG_IS_ENABLED(OF_PLATDATA)) {
+	if (CONFIG_IS_ENABLED(OF_REAL)) {
 		ret = dm_extended_scan(pre_reloc_only);
 		if (ret) {
 			debug("dm_extended_scan() failed: %d\n", ret);
@@ -332,7 +415,7 @@ static int dm_scan(bool pre_reloc_only)
 	if (ret)
 		return ret;
 
-	return 0;
+	return dm_probe_devices(gd->dm_root, pre_reloc_only);
 }
 
 int dm_init_and_scan(bool pre_reloc_only)
@@ -344,13 +427,26 @@ int dm_init_and_scan(bool pre_reloc_only)
 		debug("dm_init() failed: %d\n", ret);
 		return ret;
 	}
-	ret = dm_scan(pre_reloc_only);
-	if (ret) {
-		log_debug("dm_scan() failed: %d\n", ret);
-		return ret;
+	if (!CONFIG_IS_ENABLED(OF_PLATDATA_INST)) {
+		ret = dm_scan(pre_reloc_only);
+		if (ret) {
+			log_debug("dm_scan() failed: %d\n", ret);
+			return ret;
+		}
+	}
+	if (CONFIG_IS_ENABLED(DM_EVENT)) {
+		ret = event_notify_null(EVT_DM_POST_INIT);
+		if (ret)
+			return log_msg_ret("ev", ret);
 	}
 
 	return 0;
+}
+
+void dm_get_stats(int *device_countp, int *uclass_countp)
+{
+	*device_countp = device_get_decendent_count(gd->dm_root);
+	*uclass_countp = uclass_get_count();
 }
 
 #ifdef CONFIG_ACPIGEN

@@ -14,6 +14,7 @@
 #include <spi.h>
 #include <time.h>
 #include <clk.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
@@ -143,7 +144,7 @@ static int zynq_spi_probe(struct udevice *bus)
 	}
 
 	ret = clk_enable(&clk);
-	if (ret && ret != -ENOSYS) {
+	if (ret) {
 		dev_err(bus, "failed to enable clock\n");
 		return ret;
 	}

@@ -14,6 +14,7 @@
 #include <console.h>
 #include <env.h>
 #include <log.h>
+#include <asm/global_data.h>
 #include <linux/ctype.h>
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -569,7 +570,7 @@ int cmd_discard_repeatable(struct cmd_tbl *cmdtp, int flag, int argc,
  * @param argc		Number of arguments (arg 0 must be the command text)
  * @param argv		Arguments
  * @param repeatable	Can the command be repeated
- * @return 0 if command succeeded, else non-zero (CMD_RET_...)
+ * Return: 0 if command succeeded, else non-zero (CMD_RET_...)
  */
 static int cmd_call(struct cmd_tbl *cmdtp, int flag, int argc,
 		    char *const argv[], int *repeatable)

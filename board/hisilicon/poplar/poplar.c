@@ -9,6 +9,7 @@
 #include <dm.h>
 #include <init.h>
 #include <asm/cache.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <dm/platform_data/serial_pl01x.h>
 #include <asm/arch/hi3798cv200.h>
@@ -59,7 +60,7 @@ int checkboard(void)
 	return 0;
 }
 
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
 	psci_system_reset();
 }
@@ -194,4 +195,3 @@ int board_init(void)
 
 	return 0;
 }
-

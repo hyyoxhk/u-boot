@@ -9,7 +9,6 @@
 #ifndef __ARCH_FSL_LSCH3_IMMAP_H_
 #define __ARCH_FSL_LSCH3_IMMAP_H_
 
-#define CONFIG_SYS_IMMR				0x01000000
 #define CONFIG_SYS_FSL_DDR_ADDR			(CONFIG_SYS_IMMR + 0x00080000)
 #define CONFIG_SYS_FSL_DDR2_ADDR		(CONFIG_SYS_IMMR + 0x00090000)
 #define CONFIG_SYS_FSL_DDR3_ADDR		0x08210000
@@ -587,6 +586,16 @@ struct ccsr_serdes {
 		u8      res1[0x840 - 0x820];
 	} lane[8];
 	u8 res5[0x19fc - 0xa00];
+};
+
+struct ccsr_gpio {
+	u32	gpdir;
+	u32	gpodr;
+	u32	gpdat;
+	u32	gpier;
+	u32	gpimr;
+	u32	gpicr;
+	u32	gpibe;
 };
 
 #endif /*__ASSEMBLY__ */

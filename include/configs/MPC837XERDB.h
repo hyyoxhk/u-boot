@@ -13,7 +13,6 @@
 /*
  * High Level Configuration Options
  */
-#define CONFIG_E300		1 /* E300 family */
 
 #define CONFIG_HWCONFIG
 
@@ -66,9 +65,6 @@
 
 #define CONFIG_SYS_DDRCDR_VALUE	(DDRCDR_DHC_EN | DDRCDR_ODT | DDRCDR_Q_DRN)
 
-#undef CONFIG_DDR_ECC		/* support DDR ECC function */
-#undef CONFIG_DDR_ECC_CMD	/* Use DDR ECC user commands */
-
 #undef CONFIG_NEVER_ASSERT_ODT_TO_CPU	/* Never assert ODT to internal IOs */
 
 /*
@@ -113,17 +109,9 @@
 				| (0 << SDRAM_INTERVAL_BSTOPRE_SHIFT))
 				/* 0x06090100 */
 
-#if defined(CONFIG_DDR_2T_TIMING)
-#define CONFIG_SYS_DDR_SDRAM_CFG	(SDRAM_CFG_SREN \
-					| SDRAM_CFG_SDRAM_TYPE_DDR2 \
-					| SDRAM_CFG_32_BE \
-					| SDRAM_CFG_2T_EN)
-					/* 0x43088000 */
-#else
 #define CONFIG_SYS_DDR_SDRAM_CFG	(SDRAM_CFG_SREN \
 					| SDRAM_CFG_SDRAM_TYPE_DDR2)
 					/* 0x43000000 */
-#endif
 #define CONFIG_SYS_DDR_SDRAM_CFG2	0x00001000 /* 1 posted refresh */
 #define CONFIG_SYS_DDR_MODE		((0x0406 << SDRAM_MODE_ESD_SHIFT) \
 					| (0x0442 << SDRAM_MODE_SD_SHIFT))
@@ -138,7 +126,6 @@
 /*
  * The reserved memory
  */
-#define CONFIG_SYS_MONITOR_BASE	CONFIG_SYS_TEXT_BASE /* start of monitor */
 
 #if (CONFIG_SYS_MONITOR_BASE < CONFIG_SYS_FLASH_BASE)
 #define CONFIG_SYS_RAMBOOT
@@ -147,7 +134,6 @@
 #endif
 
 #define CONFIG_SYS_MONITOR_LEN	(512 * 1024) /* Reserve 512 kB for Mon */
-#define CONFIG_SYS_MALLOC_LEN	(512 * 1024) /* Reserved for malloc */
 
 /*
  * Initial RAM Base Address Setup
@@ -167,7 +153,6 @@
 #define CONFIG_SYS_FLASH_EMPTY_INFO		/* display empty sectors */
 
 
-#define CONFIG_SYS_MAX_FLASH_BANKS	1 /* number of banks */
 #define CONFIG_SYS_MAX_FLASH_SECT	256 /* max sectors per device */
 
 #undef	CONFIG_SYS_FLASH_CHECKSUM
@@ -203,11 +188,6 @@
 #define CONFIG_FSL_SERDES2	0xe3100
 
 /* I2C */
-#define CONFIG_SYS_I2C
-#define CONFIG_SYS_I2C_FSL
-#define CONFIG_SYS_FSL_I2C_SPEED	400000
-#define CONFIG_SYS_FSL_I2C_SLAVE	0x7F
-#define CONFIG_SYS_FSL_I2C_OFFSET	0x3000
 #define CONFIG_SYS_I2C_NOPROBES		{ {0, 0x51} }
 
 /*
@@ -255,10 +235,7 @@
 #define CONFIG_SYS_PCIE2_IO_SIZE	0x00800000
 
 #ifdef CONFIG_PCI
-#define CONFIG_PCI_INDIRECT_BRIDGE
-
 #undef CONFIG_PCI_SCAN_SHOW	/* show pci devices on startup */
-#define CONFIG_SYS_PCI_SUBSYS_VENDORID 0x1957	/* Freescale */
 #endif	/* CONFIG_PCI */
 
 /*
@@ -271,7 +248,6 @@
 #define CONFIG_TSEC1
 
 #ifdef CONFIG_TSEC1
-#define CONFIG_HAS_ETH0
 #define CONFIG_TSEC1_NAME		"TSEC0"
 #define CONFIG_SYS_TSEC1_OFFSET		0x24000
 #define TSEC1_PHY_ADDR			2
@@ -280,23 +256,17 @@
 #endif
 
 #ifdef CONFIG_TSEC2
-#define CONFIG_HAS_ETH1
 #define CONFIG_TSEC2_NAME		"TSEC1"
 #define CONFIG_SYS_TSEC2_OFFSET		0x25000
 #define TSEC2_PHY_ADDR			0x1c
 #define TSEC2_FLAGS			(TSEC_GIGABIT | TSEC_REDUCED)
 #define TSEC2_PHYIDX			0
 #endif
-
-/* Options are: TSEC[0-1] */
-#define CONFIG_ETHPRIME			"TSEC0"
-
 #endif
 
 /*
  * SATA
  */
-#define CONFIG_SYS_SATA_MAX_DEVICE	2
 #define CONFIG_SATA1
 #define CONFIG_SYS_SATA1_OFFSET	0x18000
 #define CONFIG_SYS_SATA1	(CONFIG_SYS_IMMR + CONFIG_SYS_SATA1_OFFSET)
@@ -317,13 +287,6 @@
 #define CONFIG_LOADS_ECHO	1	/* echo on for serial download */
 #define CONFIG_SYS_LOADS_BAUD_CHANGE	1	/* allow baudrate change */
 
-/*
- * BOOTP options
- */
-#define CONFIG_BOOTP_BOOTFILESIZE
-
-#undef CONFIG_WATCHDOG		/* watchdog disabled */
-
 #ifdef CONFIG_MMC
 #define CONFIG_FSL_ESDHC_PIN_MUX
 #define CONFIG_SYS_FSL_ESDHC_ADDR	CONFIG_SYS_MPC83xx_ESDHC_ADDR
@@ -332,7 +295,6 @@
 /*
  * Miscellaneous configurable options
  */
-#define CONFIG_SYS_LOAD_ADDR	0x2000000 /* default load address */
 
 /*
  * For booting Linux, the board info and command line data
@@ -342,30 +304,20 @@
 #define CONFIG_SYS_BOOTMAPSZ	(256 << 20) /* Initial Memory map for Linux */
 #define CONFIG_SYS_BOOTM_LEN	(64 << 20)	/* Increase max gunzip size */
 
-#if defined(CONFIG_CMD_KGDB)
-#define CONFIG_KGDB_BAUDRATE	230400	/* speed of kgdb serial port */
-#endif
-
 /*
  * Environment Configuration
  */
 
 #define CONFIG_HAS_FSL_DR_USB
-#define CONFIG_USB_EHCI_FSL
 #define CONFIG_EHCI_HCD_INIT_AFTER_RESET
 
 #define CONFIG_NETDEV		"eth1"
 
 #define CONFIG_HOSTNAME		"mpc837x_rdb"
 #define CONFIG_ROOTPATH		"/nfsroot"
-#define CONFIG_RAMDISKFILE	"rootfs.ext2.gz.uboot"
-#define CONFIG_BOOTFILE		"uImage"
 				/* U-Boot image on TFTP server */
 #define CONFIG_UBOOTPATH	"u-boot.bin"
 #define CONFIG_FDTFILE		"mpc8379_rdb.dtb"
-
-				/* default location for tftp and bootm */
-#define CONFIG_LOADADDR		800000
 
 #define CONFIG_EXTRA_ENV_SETTINGS \
 	"netdev=" CONFIG_NETDEV "\0"				\
@@ -384,7 +336,7 @@
 	"fdtaddr=780000\0"						\
 	"fdtfile=" CONFIG_FDTFILE "\0"					\
 	"ramdiskaddr=1000000\0"						\
-	"ramdiskfile=" CONFIG_RAMDISKFILE "\0"				\
+	"ramdiskfile=rootfs.ext2.gz.uboot\0"				\
 	"console=ttyS0\0"						\
 	"setbootargs=setenv bootargs "					\
 		"root=$rootdev rw console=$console,$baudrate $othbootargs\0" \
@@ -392,21 +344,5 @@
 		"ip=$ipaddr:$serverip:$gatewayip:$netmask:$hostname:"	\
 							"$netdev:off "	\
 		"root=$rootdev rw console=$console,$baudrate $othbootargs\0"
-
-#define CONFIG_NFSBOOTCOMMAND						\
-	"setenv rootdev /dev/nfs;"					\
-	"run setbootargs;"						\
-	"run setipargs;"						\
-	"tftp $loadaddr $bootfile;"					\
-	"tftp $fdtaddr $fdtfile;"					\
-	"bootm $loadaddr - $fdtaddr"
-
-#define CONFIG_RAMBOOTCOMMAND						\
-	"setenv rootdev /dev/ram;"					\
-	"run setbootargs;"						\
-	"tftp $ramdiskaddr $ramdiskfile;"				\
-	"tftp $loadaddr $bootfile;"					\
-	"tftp $fdtaddr $fdtfile;"					\
-	"bootm $loadaddr $ramdiskaddr $fdtaddr"
 
 #endif	/* __CONFIG_H */

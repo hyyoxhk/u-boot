@@ -18,6 +18,7 @@
 #include <log.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/imx-regs.h>
+#include <asm/global_data.h>
 #include <dm/device_compat.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -107,32 +108,6 @@ static u16 i2c_clk_div[50][2] = {
 	{ 1920,	0x1B }, { 2048,	0x3F }, { 2304,	0x1C }, { 2560,	0x1D },
 	{ 3072,	0x1E }, { 3840,	0x1F }
 };
-#endif
-
-#ifndef CONFIG_SYS_MXC_I2C1_SPEED
-#define CONFIG_SYS_MXC_I2C1_SPEED 100000
-#endif
-#ifndef CONFIG_SYS_MXC_I2C2_SPEED
-#define CONFIG_SYS_MXC_I2C2_SPEED 100000
-#endif
-#ifndef CONFIG_SYS_MXC_I2C3_SPEED
-#define CONFIG_SYS_MXC_I2C3_SPEED 100000
-#endif
-#ifndef CONFIG_SYS_MXC_I2C4_SPEED
-#define CONFIG_SYS_MXC_I2C4_SPEED 100000
-#endif
-
-#ifndef CONFIG_SYS_MXC_I2C1_SLAVE
-#define CONFIG_SYS_MXC_I2C1_SLAVE 0
-#endif
-#ifndef CONFIG_SYS_MXC_I2C2_SLAVE
-#define CONFIG_SYS_MXC_I2C2_SLAVE 0
-#endif
-#ifndef CONFIG_SYS_MXC_I2C3_SLAVE
-#define CONFIG_SYS_MXC_I2C3_SLAVE 0
-#endif
-#ifndef CONFIG_SYS_MXC_I2C4_SLAVE
-#define CONFIG_SYS_MXC_I2C4_SLAVE 0
 #endif
 
 /*
@@ -393,7 +368,7 @@ static struct mxc_i2c_bus mxc_i2c_buses[] = {
 #endif
 };
 
-#ifndef CONFIG_DM_I2C
+#if !CONFIG_IS_ENABLED(DM_I2C)
 int i2c_idle_bus(struct mxc_i2c_bus *i2c_bus)
 {
 	if (i2c_bus && i2c_bus->idle_bus_fn)
@@ -645,7 +620,7 @@ int __enable_i2c_clk(unsigned char enable, unsigned int i2c_num)
 int enable_i2c_clk(unsigned char enable, unsigned int i2c_num)
 	__attribute__((weak, alias("__enable_i2c_clk")));
 
-#ifndef CONFIG_DM_I2C
+#if !CONFIG_IS_ENABLED(DM_I2C)
 /*
  * Read data from I2C device
  *
@@ -796,8 +771,6 @@ void bus_i2c_init(int index, int speed, int unused,
 
 	bus_i2c_set_bus_speed(&mxc_i2c_buses[index], speed);
 }
-
-
 
 /*
  * Init I2C Bus

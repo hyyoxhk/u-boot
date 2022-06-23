@@ -9,6 +9,7 @@
 #include <net.h>
 #include <asm/arch/stm32.h>
 #include <asm/arch/sys_proto.h>
+#include <asm/global_data.h>
 #include <asm/gpio.h>
 #include <asm/io.h>
 #include <bootm.h>
@@ -41,6 +42,7 @@
 #include <usb.h>
 #include <usb/dwc2_udc.h>
 #include <watchdog.h>
+#include <dm/ofnode.h>
 #include "../../st/common/stpmic1.h"
 
 /* SYSCFG registers */
@@ -85,6 +87,8 @@ DECLARE_GLOBAL_DATA_PTR;
 #define KS_CCR_EEPROM	BIT(9)
 #define KS_BE0		BIT(12)
 #define KS_BE1		BIT(13)
+#define KS_CIDER	0xC0
+#define CIDER_ID	0x8870
 
 int setup_mac_address(void)
 {
@@ -122,10 +126,17 @@ int setup_mac_address(void)
 	 * is present. If EEPROM is present, it must contain valid
 	 * MAC address.
 	 */
-	u32 reg, ccr;
+	u32 reg, cider, ccr;
 	reg = fdt_get_base_address(gd->fdt_blob, off);
 	if (!reg)
 		goto out_set_ethaddr;
+
+	writew(KS_BE0 | KS_BE1 | KS_CIDER, reg + 2);
+	cider = readw(reg);
+	if ((cider & 0xfff0) != CIDER_ID) {
+		skip_eth1 = true;
+		goto out_set_ethaddr;
+	}
 
 	writew(KS_BE0 | KS_BE1 | KS_CCR, reg + 2);
 	ccr = readw(reg);
@@ -201,15 +212,15 @@ static void board_get_coding_straps(void)
 	ofnode node;
 	int i, ret;
 
+	brdcode = 0;
+	ddr3code = 0;
+	somcode = 0;
+
 	node = ofnode_path("/config");
 	if (!ofnode_valid(node)) {
 		printf("%s: no /config node?\n", __func__);
 		return;
 	}
-
-	brdcode = 0;
-	ddr3code = 0;
-	somcode = 0;
 
 	ret = gpio_request_list_by_name_nodev(node, "dh,som-coding-gpios",
 					      gpio, ARRAY_SIZE(gpio),
@@ -217,17 +228,23 @@ static void board_get_coding_straps(void)
 	for (i = 0; i < ret; i++)
 		somcode |= !!dm_gpio_get_value(&(gpio[i])) << i;
 
+	gpio_free_list_nodev(gpio, ret);
+
 	ret = gpio_request_list_by_name_nodev(node, "dh,ddr3-coding-gpios",
 					      gpio, ARRAY_SIZE(gpio),
 					      GPIOD_IS_IN);
 	for (i = 0; i < ret; i++)
 		ddr3code |= !!dm_gpio_get_value(&(gpio[i])) << i;
 
+	gpio_free_list_nodev(gpio, ret);
+
 	ret = gpio_request_list_by_name_nodev(node, "dh,board-coding-gpios",
 					      gpio, ARRAY_SIZE(gpio),
 					      GPIOD_IS_IN);
 	for (i = 0; i < ret; i++)
 		brdcode |= !!dm_gpio_get_value(&(gpio[i])) << i;
+
+	gpio_free_list_nodev(gpio, ret);
 
 	printf("Code:  SoM:rev=%d,ddr3=%d Board:rev=%d\n",
 		somcode, ddr3code, brdcode);
@@ -372,10 +389,10 @@ int g_dnl_bind_fixup(struct usb_device_descriptor *dev, const char *name)
 #ifdef CONFIG_LED
 static int get_led(struct udevice **dev, char *led_string)
 {
-	char *led_name;
+	const char *led_name;
 	int ret;
 
-	led_name = fdtdec_get_config_string(gd->fdt_blob, led_string);
+	led_name = ofnode_conf_read_str(led_string);
 	if (!led_name) {
 		pr_debug("%s: could not find %s config string\n",
 			 __func__, led_string);
@@ -577,27 +594,102 @@ static void board_init_fmc2(void)
 	setbits_le32(STM32_FMC2_BASE + STM32_FMC2_BCR1, STM32_FMC2_BCRx_FMCEN);
 }
 
+#ifdef CONFIG_DM_REGULATOR
+#define STPMIC_NVM_BUCKS_VOUT_SHR			0xfc
+#define STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_1V2		0
+#define STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_1V8		1
+#define STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_3V0		2
+#define STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_3V3		3
+#define STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_MASK		GENMASK(1, 0)
+#define STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_OFFSET(n)	((((n) - 1) & 3) * 2)
+static int board_get_regulator_buck3_nvm_uv_av96(int *uv)
+{
+	const void *fdt = gd->fdt_blob;
+	struct udevice *dev;
+	u8 bucks_vout = 0;
+	const char *prop;
+	int len, ret;
+
+	/* Check whether this is Avenger96 board. */
+	prop = fdt_getprop(fdt, 0, "compatible", &len);
+	if (!prop || !len)
+		return -ENODEV;
+
+	if (!strstr(prop, "avenger96"))
+		return -EINVAL;
+
+	/* Read out STPMIC1 NVM and determine default Buck3 voltage. */
+	ret = uclass_get_device_by_driver(UCLASS_MISC,
+					  DM_DRIVER_GET(stpmic1_nvm),
+					  &dev);
+	if (ret)
+		return ret;
+
+	ret = misc_read(dev, STPMIC_NVM_BUCKS_VOUT_SHR, &bucks_vout, 1);
+	if (ret != 1)
+		return -EINVAL;
+
+	bucks_vout >>= STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_OFFSET(3);
+	bucks_vout &= STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_MASK;
+
+	/*
+	 * Avenger96 board comes in multiple regulator configurations:
+	 * - rev.100 or rev.200 have Buck3 preconfigured to 3V3 operation on
+	 *   boot and contains extra Enpirion EP53A8LQI DCDC converter which
+	 *   supplies the IO. Reduce Buck3 voltage to 2V9 to not waste power.
+	 * - rev.200L have Buck3 preconfigured to 1V8 operation and have no
+	 *   Enpirion EP53A8LQI DCDC anymore, the IO is supplied from Buck3.
+	 */
+	if (bucks_vout == STPMIC_NVM_BUCKS_VOUT_SHR_BUCK_3V3)
+		*uv = 2900000;
+	else
+		*uv = 1800000;
+
+	return 0;
+}
+
+static void board_init_regulator_av96(void)
+{
+	struct udevice *rdev;
+	int ret, uv;
+
+	ret = board_get_regulator_buck3_nvm_uv_av96(&uv);
+	if (ret)	/* Not Avenger96 board. */
+		return;
+
+	ret = regulator_get_by_devname("buck3", &rdev);
+	if (ret)
+		return;
+
+	/* Adjust Buck3 per preconfigured PMIC voltage from NVM. */
+	regulator_set_value(rdev, uv);
+}
+
+static void board_init_regulator(void)
+{
+	board_init_regulator_av96();
+
+	regulators_enable_boot_on(_DEBUG);
+}
+#else
+static inline int board_get_regulator_buck3_nvm_uv_av96(int *uv)
+{
+	return -EINVAL;
+}
+
+static inline void board_init_regulator(void) {}
+#endif
+
 /* board dependent setup after realloc */
 int board_init(void)
 {
-	/* address of boot parameters */
-	gd->bd->bi_boot_params = STM32_DDR_BASE + 0x100;
-
-	if (CONFIG_IS_ENABLED(DM_GPIO_HOG))
-		gpio_hog_probe_all();
-
 	board_key_check();
 
-#ifdef CONFIG_DM_REGULATOR
-	regulators_enable_boot_on(_DEBUG);
-#endif
+	board_init_regulator();
 
 	sysconf_init();
 
 	board_init_fmc2();
-
-	if (CONFIG_IS_ENABLED(LED))
-		led_default_state();
 
 	return 0;
 }
@@ -650,11 +742,11 @@ int board_interface_eth_init(struct udevice *dev,
 	bool eth_ref_clk_sel_reg = false;
 
 	/* Gigabit Ethernet 125MHz clock selection. */
-	eth_clk_sel_reg = dev_read_bool(dev, "st,eth_clk_sel");
+	eth_clk_sel_reg = dev_read_bool(dev, "st,eth-clk-sel");
 
 	/* Ethernet 50Mhz RMII clock selection */
 	eth_ref_clk_sel_reg =
-		dev_read_bool(dev, "st,eth_ref_clk_sel");
+		dev_read_bool(dev, "st,eth-ref-clk-sel");
 
 	syscfg = (u8 *)syscon_get_first_range(STM32MP_SYSCON_SYSCFG);
 
@@ -713,6 +805,25 @@ int board_interface_eth_init(struct udevice *dev,
 #if defined(CONFIG_OF_BOARD_SETUP)
 int ft_board_setup(void *blob, struct bd_info *bd)
 {
+	const char *buck3path = "/soc/i2c@5c002000/stpmic@33/regulators/buck3";
+	int buck3off, ret, uv;
+
+	ret = board_get_regulator_buck3_nvm_uv_av96(&uv);
+	if (ret)	/* Not Avenger96 board, do not patch Buck3 in DT. */
+		return 0;
+
+	buck3off = fdt_path_offset(blob, buck3path);
+	if (buck3off < 0)	/* No Buck3 regulator found. */
+		return 0;
+
+	ret = fdt_setprop_u32(blob, buck3off, "regulator-min-microvolt", uv);
+	if (ret < 0)
+		return ret;
+
+	ret = fdt_setprop_u32(blob, buck3off, "regulator-max-microvolt", uv);
+	if (ret < 0)
+		return ret;
+
 	return 0;
 }
 #endif

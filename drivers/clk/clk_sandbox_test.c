@@ -11,12 +11,6 @@
 #include <dm/device_compat.h>
 #include <linux/err.h>
 
-struct sandbox_clk_test {
-	struct clk clks[SANDBOX_CLK_TEST_NON_DEVM_COUNT];
-	struct clk *clkps[SANDBOX_CLK_TEST_ID_COUNT];
-	struct clk_bulk bulk;
-};
-
 static const char * const sandbox_clk_test_names[] = {
 	[SANDBOX_CLK_TEST_ID_FIXED] = "fixed",
 	[SANDBOX_CLK_TEST_ID_SPI] = "spi",
@@ -143,14 +137,11 @@ int sandbox_clk_test_disable_bulk(struct udevice *dev)
 int sandbox_clk_test_free(struct udevice *dev)
 {
 	struct sandbox_clk_test *sbct = dev_get_priv(dev);
-	int i, ret;
+	int i;
 
 	devm_clk_put(dev, sbct->clkps[SANDBOX_CLK_TEST_ID_DEVM1]);
-	for (i = 0; i < SANDBOX_CLK_TEST_NON_DEVM_COUNT; i++) {
-		ret = clk_free(&sbct->clks[i]);
-		if (ret)
-			return ret;
-	}
+	for (i = 0; i < SANDBOX_CLK_TEST_NON_DEVM_COUNT; i++)
+		clk_free(&sbct->clks[i]);
 
 	return 0;
 }

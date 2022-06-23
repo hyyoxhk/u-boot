@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Copyright 2019 Toradex AG
+ * Copyright 2019-2021 Toradex AG
  */
 
 /dts-v1/;
@@ -8,6 +8,12 @@
 #include "imx6ull.dtsi"
 
 / {
+	/* Ethernet aliases to ensure correct MAC addresses */
+	aliases {
+		ethernet0 = &fec2;
+		ethernet1 = &fec1;
+	};
+
 	chosen {
 		stdout-path = &uart1;
 	};
@@ -35,9 +41,9 @@
 		regulator-max-microvolt = <5000000>;
 	};
 
-	reg_sd1_vmmc: regulator-sd1-vmmc {
+	reg_sd1_vqmmc: regulator-sd1-vqmmc {
 		compatible = "regulator-gpio";
-		gpio = <&gpio5 9 GPIO_ACTIVE_HIGH>;
+		gpios = <&gpio5 9 GPIO_ACTIVE_HIGH>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_snvs_reg_sd>;
 		regulator-always-on;
@@ -57,6 +63,18 @@
 		regulator-max-microvolt = <5000000>;
 		gpio = <&gpio1 2 GPIO_ACTIVE_LOW>; /* USBH_PEN */
 		vin-supply = <&reg_5v0>;
+	};
+
+	reg_eth_phy: regulator-eth-phy {
+		compatible = "regulator-fixed-clock";
+		regulator-boot-on;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-name = "eth_phy";
+		regulator-type = "voltage";
+		vin-supply = <&reg_module_3v3>;
+		clocks = <&clks IMX6UL_CLK_ENET2_REF_125M>;
+		startup-delay-us = <150000>;
 	};
 };
 
@@ -78,6 +96,7 @@
 	pinctrl-0 = <&pinctrl_enet2>;
 	phy-mode = "rmii";
 	phy-handle = <&ethphy1>;
+	phy-supply = <&reg_eth_phy>;
 	status = "okay";
 
 	mdio {
@@ -90,17 +109,6 @@
 			reg = <2>;
 		};
 	};
-};
-
-/* NAND */
-&gpmi {
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_gpmi_nand>;
-	nand-on-flash-bbt;
-	nand-ecc-mode = "hw";
-	nand-ecc-strength = <8>;
-	nand-ecc-step-size = <512>;
-	status = "okay";
 };
 
 /*
@@ -225,12 +233,15 @@
 	assigned-clocks = <&clks IMX6UL_CLK_USDHC1_SEL>, <&clks IMX6UL_CLK_USDHC1>;
 	assigned-clock-parents = <&clks IMX6UL_CLK_PLL2_PFD2>;
 	assigned-clock-rates = <0>, <198000000>;
+	bus-width = <4>;
 	cd-gpios = <&gpio5 0 GPIO_ACTIVE_LOW>; /* MMC_CD */
+	disable-wp;
+	no-1-8-v;
 	pinctrl-names = "default", "state_100mhz", "state_200mhz";
 	pinctrl-0 = <&pinctrl_usdhc1 &pinctrl_snvs_usdhc1_cd>;
 	pinctrl-1 = <&pinctrl_usdhc1_100mhz>;
 	pinctrl-2 = <&pinctrl_usdhc1_200mhz>;
-	vmmc-supply = <&reg_sd1_vmmc>;
+	vqmmc-supply = <&reg_sd1_vqmmc>;
 	status = "okay";
 };
 
@@ -337,25 +348,6 @@
 			MX6UL_PAD_CSI_DATA00__GPIO4_IO21	0x14 /* SODIMM 101 */
 			MX6UL_PAD_CSI_DATA01__GPIO4_IO22	0x14 /* SODIMM 103 */
 			MX6UL_PAD_CSI_HSYNC__GPIO4_IO20		0x14 /* SODIMM 94 */
-		>;
-	};
-
-	pinctrl_gpmi_nand: gpmi-nand-grp {
-		fsl,pins = <
-			MX6UL_PAD_NAND_DATA00__RAWNAND_DATA00	0x100a9
-			MX6UL_PAD_NAND_DATA01__RAWNAND_DATA01	0x100a9
-			MX6UL_PAD_NAND_DATA02__RAWNAND_DATA02	0x100a9
-			MX6UL_PAD_NAND_DATA03__RAWNAND_DATA03	0x100a9
-			MX6UL_PAD_NAND_DATA04__RAWNAND_DATA04	0x100a9
-			MX6UL_PAD_NAND_DATA05__RAWNAND_DATA05	0x100a9
-			MX6UL_PAD_NAND_DATA06__RAWNAND_DATA06	0x100a9
-			MX6UL_PAD_NAND_DATA07__RAWNAND_DATA07	0x100a9
-			MX6UL_PAD_NAND_CLE__RAWNAND_CLE		0x100a9
-			MX6UL_PAD_NAND_ALE__RAWNAND_ALE		0x100a9
-			MX6UL_PAD_NAND_RE_B__RAWNAND_RE_B	0x100a9
-			MX6UL_PAD_NAND_WE_B__RAWNAND_WE_B	0x100a9
-			MX6UL_PAD_NAND_CE0_B__RAWNAND_CE0_B	0x100a9
-			MX6UL_PAD_NAND_READY_B__RAWNAND_READY_B	0x100a9
 		>;
 	};
 
@@ -484,8 +476,8 @@
 
 	pinctrl_usdhc1: usdhc1-grp {
 		fsl,pins = <
-			MX6UL_PAD_SD1_CLK__USDHC1_CLK		0x17059
-			MX6UL_PAD_SD1_CMD__USDHC1_CMD		0x10059
+			MX6UL_PAD_SD1_CLK__USDHC1_CLK		0x10059
+			MX6UL_PAD_SD1_CMD__USDHC1_CMD		0x17059
 			MX6UL_PAD_SD1_DATA0__USDHC1_DATA0	0x17059
 			MX6UL_PAD_SD1_DATA1__USDHC1_DATA1	0x17059
 			MX6UL_PAD_SD1_DATA2__USDHC1_DATA2	0x17059
@@ -495,8 +487,8 @@
 
 	pinctrl_usdhc1_100mhz: usdhc1-100mhz-grp {
 		fsl,pins = <
-			MX6UL_PAD_SD1_CLK__USDHC1_CLK		0x170b9
-			MX6UL_PAD_SD1_CMD__USDHC1_CMD		0x100b9
+			MX6UL_PAD_SD1_CLK__USDHC1_CLK		0x100b9
+			MX6UL_PAD_SD1_CMD__USDHC1_CMD		0x170b9
 			MX6UL_PAD_SD1_DATA0__USDHC1_DATA0	0x170b9
 			MX6UL_PAD_SD1_DATA1__USDHC1_DATA1	0x170b9
 			MX6UL_PAD_SD1_DATA2__USDHC1_DATA2	0x170b9
@@ -506,8 +498,8 @@
 
 	pinctrl_usdhc1_200mhz: usdhc1-200mhz-grp {
 		fsl,pins = <
-			MX6UL_PAD_SD1_CLK__USDHC1_CLK		0x170f9
-			MX6UL_PAD_SD1_CMD__USDHC1_CMD		0x100f9
+			MX6UL_PAD_SD1_CLK__USDHC1_CLK		0x100f9
+			MX6UL_PAD_SD1_CMD__USDHC1_CMD		0x170f9
 			MX6UL_PAD_SD1_DATA0__USDHC1_DATA0	0x170b9
 			MX6UL_PAD_SD1_DATA1__USDHC1_DATA1	0x170b9
 			MX6UL_PAD_SD1_DATA2__USDHC1_DATA2	0x170b9

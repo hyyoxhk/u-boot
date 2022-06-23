@@ -5,6 +5,7 @@
  */
 
 #include <common.h>
+#include <clock_legacy.h>
 #include <bootstage.h>
 #include <dm.h>
 #include <errno.h>
@@ -14,6 +15,7 @@
 #include <timer.h>
 #include <watchdog.h>
 #include <div64.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <linux/delay.h>
 

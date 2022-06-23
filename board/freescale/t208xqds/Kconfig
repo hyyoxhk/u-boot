@@ -1,4 +1,4 @@
-if TARGET_T2080QDS || TARGET_T2081QDS
+if TARGET_T2080QDS
 
 config SYS_BOARD
 	default "t208xqds"
@@ -8,6 +8,9 @@ config SYS_VENDOR
 
 config SYS_CONFIG_NAME
 	default "T208xQDS"
+
+config SRIO_PCIE_BOOT_SLAVE
+	bool "Boot as a SRIO PCIe slave device"
 
 source "board/freescale/common/Kconfig"
 

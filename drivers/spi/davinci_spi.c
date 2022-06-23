@@ -12,6 +12,7 @@
 #include <log.h>
 #include <spi.h>
 #include <malloc.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch/hardware.h>
 #include <dm.h>
@@ -390,7 +391,7 @@ static int davinci_spi_probe(struct udevice *bus)
 	return 0;
 }
 
-#if CONFIG_IS_ENABLED(OF_CONTROL) && !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 static int davinci_ofdata_to_platadata(struct udevice *bus)
 {
 	struct davinci_spi_plat *plat = dev_get_plat(bus);
@@ -417,7 +418,7 @@ static const struct udevice_id davinci_spi_ids[] = {
 U_BOOT_DRIVER(davinci_spi) = {
 	.name = "davinci_spi",
 	.id = UCLASS_SPI,
-#if CONFIG_IS_ENABLED(OF_CONTROL) && !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 	.of_match = davinci_spi_ids,
 	.of_to_plat = davinci_ofdata_to_platadata,
 	.plat_auto	= sizeof(struct davinci_spi_plat),

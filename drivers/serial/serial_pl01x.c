@@ -11,6 +11,7 @@
 /* Simple U-Boot driver for the PrimeCell PL010/PL011 UARTs */
 
 #include <common.h>
+#include <asm/global_data.h>
 /* For get_bus_freq() */
 #include <clock_legacy.h>
 #include <dm.h>
@@ -29,8 +30,8 @@ DECLARE_GLOBAL_DATA_PTR;
 #ifndef CONFIG_DM_SERIAL
 
 static volatile unsigned char *const port[] = CONFIG_PL01x_PORTS;
-static enum pl01x_type pl01x_type __attribute__ ((section(".data")));
-static struct pl01x_regs *base_regs __attribute__ ((section(".data")));
+static enum pl01x_type pl01x_type __section(".data");
+static struct pl01x_regs *base_regs __section(".data");
 #define NUM_PORTS (sizeof(port)/sizeof(port[0]))
 
 #endif
@@ -190,9 +191,7 @@ static void pl01x_serial_init_baud(int baudrate)
 {
 	int clock = 0;
 
-#if defined(CONFIG_PL010_SERIAL)
-	pl01x_type = TYPE_PL010;
-#elif defined(CONFIG_PL011_SERIAL)
+#if defined(CONFIG_PL011_SERIAL)
 	pl01x_type = TYPE_PL011;
 	clock = CONFIG_PL011_CLOCK;
 #endif
@@ -405,8 +404,12 @@ static void _debug_uart_init(void)
 {
 #ifndef CONFIG_DEBUG_UART_SKIP_INIT
 	struct pl01x_regs *regs = (struct pl01x_regs *)CONFIG_DEBUG_UART_BASE;
-	enum pl01x_type type = CONFIG_IS_ENABLED(DEBUG_UART_PL011) ?
-				TYPE_PL011 : TYPE_PL010;
+	enum pl01x_type type;
+
+	if (IS_ENABLED(CONFIG_DEBUG_UART_PL011))
+		type = TYPE_PL011;
+	else
+		type = TYPE_PL010;
 
 	pl01x_generic_serial_init(regs, type);
 	pl01x_generic_setbrg(regs, type,
@@ -418,7 +421,8 @@ static inline void _debug_uart_putc(int ch)
 {
 	struct pl01x_regs *regs = (struct pl01x_regs *)CONFIG_DEBUG_UART_BASE;
 
-	pl01x_putc(regs, ch);
+	while (pl01x_putc(regs, ch) == -EAGAIN)
+		;
 }
 
 DEBUG_UART_FUNCS

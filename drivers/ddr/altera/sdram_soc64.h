@@ -53,7 +53,7 @@ struct altera_sdram_plat {
 #define DDR_HMC_INTSTAT_DERRPENA_SET_MSK	BIT(1)
 #define DDR_HMC_INTSTAT_ADDRMTCFLG_SET_MSK	BIT(16)
 #define DDR_HMC_INTMODE_INTMODE_SET_MSK		BIT(0)
-#define DDR_HMC_RSTHANDSHAKE_MASK		0x000000ff
+#define DDR_HMC_RSTHANDSHAKE_MASK		0x0000000f
 #define DDR_HMC_CORE2SEQ_INT_REQ		0xF
 #define DDR_HMC_SEQ2CORE_INT_RESP_MASK		BIT(3)
 #define DDR_HMC_HPSINTFCSEL_ENABLE_MASK		0x001f1f1f
@@ -180,6 +180,7 @@ int emif_reset(struct altera_sdram_plat *plat);
 int poll_hmc_clock_status(void);
 void sdram_clear_mem(phys_addr_t addr, phys_size_t size);
 void sdram_init_ecc_bits(struct bd_info *bd);
+void sdram_set_firewall(struct bd_info *bd);
 void sdram_size_check(struct bd_info *bd);
 phys_size_t sdram_calculate_size(struct altera_sdram_plat *plat);
 int sdram_mmr_init_full(struct udevice *dev);

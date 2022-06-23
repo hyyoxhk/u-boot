@@ -10,6 +10,7 @@
 
 #include <common.h>
 #include <ahci.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <dm.h>
 #include <dm/of_access.h>
@@ -20,6 +21,7 @@
 #include <sata.h>
 #include <scsi.h>
 #include <syscon.h>
+#include <dm/device_compat.h>
 
 #define SYS_CFG			0x14
 #define SYS_CFG_SATA_MSK	GENMASK(31, 30)

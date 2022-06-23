@@ -6,6 +6,7 @@
  */
 
 #include <log.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <common.h>
 #include <clk.h>
@@ -133,7 +134,7 @@ static const struct wdt_ops sp805_wdt_ops = {
 };
 
 static const struct udevice_id sp805_wdt_ids[] = {
-	{ .compatible = "arm,sp805-wdt" },
+	{ .compatible = "arm,sp805" },
 	{}
 };
 

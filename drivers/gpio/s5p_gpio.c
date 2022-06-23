@@ -10,6 +10,7 @@
 #include <fdtdec.h>
 #include <log.h>
 #include <malloc.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/gpio.h>
 #include <dm/device-internal.h>
@@ -356,6 +357,7 @@ static const struct udevice_id exynos_gpio_ids[] = {
 	{ .compatible = "samsung,exynos4x12-pinctrl" },
 	{ .compatible = "samsung,exynos5250-pinctrl" },
 	{ .compatible = "samsung,exynos5420-pinctrl" },
+	{ .compatible = "samsung,exynos78x0-gpio" },
 	{ }
 };
 

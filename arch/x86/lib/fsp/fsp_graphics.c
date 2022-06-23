@@ -13,6 +13,7 @@
 #include <video.h>
 #include <acpi/acpi_table.h>
 #include <asm/fsp/fsp_support.h>
+#include <asm/global_data.h>
 #include <asm/intel_opregion.h>
 #include <asm/mtrr.h>
 #include <dm/acpi.h>
@@ -86,7 +87,7 @@ static int fsp_video_probe(struct udevice *dev)
 	int ret;
 
 	if (!ll_boot_init())
-		return 0;
+		return -ENODEV;
 
 	printf("Video: ");
 

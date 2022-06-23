@@ -8,6 +8,9 @@
 from binman.entry import Entry
 from binman.etype.blob import Entry_blob
 
+# This is imported if needed
+state = None
+
 class Entry_blob_dtb(Entry_blob):
     """A blob that holds a device tree
 
@@ -44,15 +47,6 @@ class Entry_blob_dtb(Entry_blob):
         return None
 
     def GetFdts(self):
-        """Get the device trees used by this entry
-
-        Returns:
-            Dict:
-                key: Filename from this entry (without the path)
-                value: Tuple:
-                    Fdt object for this dtb, or None if not available
-                    Filename of file containing this dtb
-        """
         fname = self.GetDefaultFilename()
         return {self.GetFdtEtype(): [self, fname]}
 

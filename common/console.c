@@ -19,6 +19,7 @@
 #include <exports.h>
 #include <env_internal.h>
 #include <watchdog.h>
+#include <asm/global_data.h>
 #include <linux/delay.h>
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -94,16 +95,22 @@ static void console_record_putc(const char c)
 {
 	if (!(gd->flags & GD_FLG_RECORD))
 		return;
-	if  (gd->console_out.start)
-		membuff_putbyte((struct membuff *)&gd->console_out, c);
+	if  (gd->console_out.start &&
+	     !membuff_putbyte((struct membuff *)&gd->console_out, c))
+		gd->flags |= GD_FLG_RECORD_OVF;
 }
 
 static void console_record_puts(const char *s)
 {
 	if (!(gd->flags & GD_FLG_RECORD))
 		return;
-	if  (gd->console_out.start)
-		membuff_put((struct membuff *)&gd->console_out, s, strlen(s));
+	if  (gd->console_out.start) {
+		int len = strlen(s);
+
+		if (membuff_put((struct membuff *)&gd->console_out, s, len) !=
+		    len)
+			gd->flags |= GD_FLG_RECORD_OVF;
+	}
 }
 
 static int console_record_getc(void)
@@ -206,7 +213,7 @@ static int console_setfile(int file, struct stdio_dev * dev)
  * console_dev_is_serial() - Check if a stdio device is a serial device
  *
  * @sdev: Device to check
- * @return true if this device is in the serial uclass (or for pre-driver-model,
+ * Return: true if this device is in the serial uclass (or for pre-driver-model,
  * whether it is called "serial".
  */
 static bool console_dev_is_serial(struct stdio_dev *sdev)
@@ -232,9 +239,10 @@ static struct stdio_dev *tstcdev;
 struct stdio_dev **console_devices[MAX_FILES];
 int cd_count[MAX_FILES];
 
-static void __maybe_unused console_devices_set(int file, struct stdio_dev *dev)
+static void console_devices_set(int file, struct stdio_dev *dev)
 {
 	console_devices[file][0] = dev;
+	cd_count[file] = 1;
 }
 
 /**
@@ -250,15 +258,14 @@ static void __maybe_unused console_devices_set(int file, struct stdio_dev *dev)
  */
 static bool console_needs_start_stop(int file, struct stdio_dev *sdev)
 {
-	int i, j;
+	int i;
 
 	for (i = 0; i < ARRAY_SIZE(cd_count); i++) {
 		if (i == file)
 			continue;
 
-		for (j = 0; j < cd_count[i]; j++)
-			if (console_devices[i][j] == sdev)
-				return false;
+		if (iomux_match_device(console_devices[i], cd_count[i], sdev) >= 0)
+			return false;
 	}
 	return true;
 }
@@ -292,8 +299,7 @@ static int console_tstc(int file)
 	int prev;
 
 	prev = disable_ctrlc(1);
-	for (i = 0; i < cd_count[file]; i++) {
-		dev = console_devices[file][i];
+	for_each_console_dev(i, file, dev) {
 		if (dev->tstc != NULL) {
 			ret = dev->tstc(dev);
 			if (ret > 0) {
@@ -313,8 +319,7 @@ static void console_putc(int file, const char c)
 	int i;
 	struct stdio_dev *dev;
 
-	for (i = 0; i < cd_count[file]; i++) {
-		dev = console_devices[file][i];
+	for_each_console_dev(i, file, dev) {
 		if (dev->putc != NULL)
 			dev->putc(dev, c);
 	}
@@ -333,11 +338,9 @@ static void console_puts_select(int file, bool serial_only, const char *s)
 	int i;
 	struct stdio_dev *dev;
 
-	for (i = 0; i < cd_count[file]; i++) {
-		bool is_serial;
+	for_each_console_dev(i, file, dev) {
+		bool is_serial = console_dev_is_serial(dev);
 
-		dev = console_devices[file][i];
-		is_serial = console_dev_is_serial(dev);
 		if (dev->puts && serial_only == is_serial)
 			dev->puts(dev, s);
 	}
@@ -345,7 +348,8 @@ static void console_puts_select(int file, bool serial_only, const char *s)
 
 void console_puts_select_stderr(bool serial_only, const char *s)
 {
-	console_puts_select(stderr, serial_only, s);
+	if (gd->flags & GD_FLG_DEVINIT)
+		console_puts_select(stderr, serial_only, s);
 }
 
 static void console_puts(int file, const char *s)
@@ -353,8 +357,7 @@ static void console_puts(int file, const char *s)
 	int i;
 	struct stdio_dev *dev;
 
-	for (i = 0; i < cd_count[file]; i++) {
-		dev = console_devices[file][i];
+	for_each_console_dev(i, file, dev) {
 		if (dev->puts != NULL)
 			dev->puts(dev, s);
 	}
@@ -368,7 +371,7 @@ static inline void console_doenv(int file, struct stdio_dev *dev)
 #endif
 #else
 
-static void __maybe_unused console_devices_set(int file, struct stdio_dev *dev)
+static void console_devices_set(int file, struct stdio_dev *dev)
 {
 }
 
@@ -399,7 +402,8 @@ static inline void console_putc(int file, const char c)
 
 void console_puts_select(int file, bool serial_only, const char *s)
 {
-	if (serial_only == console_dev_is_serial(stdio_devices[file]))
+	if ((gd->flags & GD_FLG_DEVINIT) &&
+	    serial_only == console_dev_is_serial(stdio_devices[file]))
 		stdio_devices[file]->puts(stdio_devices[file], s);
 }
 
@@ -415,6 +419,12 @@ static inline void console_doenv(int file, struct stdio_dev *dev)
 }
 #endif
 #endif /* CONIFIG_IS_ENABLED(CONSOLE_MUX) */
+
+static void __maybe_unused console_setfile_and_devices(int file, struct stdio_dev *dev)
+{
+	console_setfile(file, dev);
+	console_devices_set(file, dev);
+}
 
 int console_start(int file, struct stdio_dev *sdev)
 {
@@ -583,13 +593,13 @@ int tstc(void)
 #define PRE_CONSOLE_FLUSHPOINT2_EVERYTHING_BUT_SERIAL	1
 
 #if CONFIG_IS_ENABLED(PRE_CONSOLE_BUFFER)
-#define CIRC_BUF_IDX(idx) ((idx) % (unsigned long)CONFIG_PRE_CON_BUF_SZ)
+#define CIRC_BUF_IDX(idx) ((idx) % (unsigned long)CONFIG_VAL(PRE_CON_BUF_SZ))
 
 static void pre_console_putc(const char c)
 {
 	char *buffer;
 
-	buffer = map_sysmem(CONFIG_PRE_CON_BUF_ADDR, CONFIG_PRE_CON_BUF_SZ);
+	buffer = map_sysmem(CONFIG_VAL(PRE_CON_BUF_ADDR), CONFIG_VAL(PRE_CON_BUF_SZ));
 
 	buffer[CIRC_BUF_IDX(gd->precon_buf_idx++)] = c;
 
@@ -605,15 +615,15 @@ static void pre_console_puts(const char *s)
 static void print_pre_console_buffer(int flushpoint)
 {
 	unsigned long in = 0, out = 0;
-	char buf_out[CONFIG_PRE_CON_BUF_SZ + 1];
+	char buf_out[CONFIG_VAL(PRE_CON_BUF_SZ) + 1];
 	char *buf_in;
 
 	if (IS_ENABLED(CONFIG_SILENT_CONSOLE) && (gd->flags & GD_FLG_SILENT))
 		return;
 
-	buf_in = map_sysmem(CONFIG_PRE_CON_BUF_ADDR, CONFIG_PRE_CON_BUF_SZ);
-	if (gd->precon_buf_idx > CONFIG_PRE_CON_BUF_SZ)
-		in = gd->precon_buf_idx - CONFIG_PRE_CON_BUF_SZ;
+	buf_in = map_sysmem(CONFIG_VAL(PRE_CON_BUF_ADDR), CONFIG_VAL(PRE_CON_BUF_SZ));
+	if (gd->precon_buf_idx > CONFIG_VAL(PRE_CON_BUF_SZ))
+		in = gd->precon_buf_idx - CONFIG_VAL(PRE_CON_BUF_SZ);
 
 	while (in < gd->precon_buf_idx)
 		buf_out[out++] = buf_in[CIRC_BUF_IDX(in++)];
@@ -727,7 +737,9 @@ int console_record_init(void)
 	int ret;
 
 	ret = membuff_new((struct membuff *)&gd->console_out,
-			  CONFIG_CONSOLE_RECORD_OUT_SIZE);
+			  gd->flags & GD_FLG_RELOC ?
+				  CONFIG_CONSOLE_RECORD_OUT_SIZE :
+				  CONFIG_CONSOLE_RECORD_OUT_SIZE_F);
 	if (ret)
 		return ret;
 	ret = membuff_new((struct membuff *)&gd->console_in,
@@ -740,6 +752,7 @@ void console_record_reset(void)
 {
 	membuff_purge((struct membuff *)&gd->console_out);
 	membuff_purge((struct membuff *)&gd->console_in);
+	gd->flags &= ~GD_FLG_RECORD_OVF;
 }
 
 int console_record_reset_enable(void)
@@ -752,6 +765,9 @@ int console_record_reset_enable(void)
 
 int console_record_readline(char *str, int maxlen)
 {
+	if (gd->flags & GD_FLG_RECORD_OVF)
+		return -ENOSPC;
+
 	return membuff_readline((struct membuff *)&gd->console_out, str,
 				maxlen, ' ');
 }
@@ -759,6 +775,11 @@ int console_record_readline(char *str, int maxlen)
 int console_record_avail(void)
 {
 	return membuff_avail((struct membuff *)&gd->console_out);
+}
+
+int console_in_puts(const char *str)
+{
+	return membuff_put((struct membuff *)&gd->console_in, str, strlen(str));
 }
 
 #endif
@@ -854,17 +875,9 @@ int console_assign(int file, const char *devname)
 	struct stdio_dev *dev;
 
 	/* Check for valid file */
-	switch (file) {
-	case stdin:
-		flag = DEV_FLAGS_INPUT;
-		break;
-	case stdout:
-	case stderr:
-		flag = DEV_FLAGS_OUTPUT;
-		break;
-	default:
-		return -1;
-	}
+	flag = stdio_file_to_flags(file);
+	if (flag < 0)
+		return flag;
 
 	/* Check for valid device name */
 
@@ -1078,17 +1091,13 @@ int console_init_r(void)
 
 	/* Initializes output console first */
 	if (outputdev != NULL) {
-		console_setfile(stdout, outputdev);
-		console_setfile(stderr, outputdev);
-		console_devices_set(stdout, outputdev);
-		console_devices_set(stderr, outputdev);
+		console_setfile_and_devices(stdout, outputdev);
+		console_setfile_and_devices(stderr, outputdev);
 	}
 
 	/* Initializes input console */
-	if (inputdev != NULL) {
-		console_setfile(stdin, inputdev);
-		console_devices_set(stdin, inputdev);
-	}
+	if (inputdev != NULL)
+		console_setfile_and_devices(stdin, inputdev);
 
 	if (!IS_ENABLED(CONFIG_SYS_CONSOLE_INFO_QUIET))
 		stdio_print_current_devices();

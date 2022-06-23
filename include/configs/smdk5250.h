@@ -14,8 +14,5 @@
 
 #undef CONFIG_EXYNOS_FB
 #undef CONFIG_EXYNOS_DP
-#undef CONFIG_KEYBOARD
-
-#define CONFIG_BOARD_COMMON
 
 #endif	/* __CONFIG_SMDK_H */

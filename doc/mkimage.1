@@ -1,10 +1,10 @@
-.TH MKIMAGE 1 "2010-05-16"
+.TH MKIMAGE 1 "2022-02-07"
 
 .SH NAME
 mkimage \- Generate image for U-Boot
 .SH SYNOPSIS
 .B mkimage
-.RB "\-l [" "uimage file name" "]"
+.RB [ \-T " \fItype\fP] " \-l " [\fIuimage file name\fP]"
 
 .B mkimage
 .RB [\fIoptions\fP] " \-f [" "image tree source file" "]" " [" "uimage file name" "]"
@@ -47,6 +47,16 @@ supports verified boot.
 .BI "\-l [" "uimage file name" "]"
 mkimage lists the information contained in the header of an existing U-Boot image.
 
+.TP
+.BI "\-T [" "image type" "]"
+Parse image file as type.
+Pass \-h as the image to see the list of supported image type.
+Without this option image type is autodetected.
+
+.TP
+.BI "\-q"
+Quiet. Don't print the image header on successful verification.
+
 .P
 .B Create old legacy image:
 
@@ -86,12 +96,26 @@ List the contents of an image.
 Set image name to 'image name'.
 
 .TP
+.BI "\-R [" "secondary image name" "]"
+Some image types support a second image for additional data. For these types,
+use \-R to specify this second image.
+
+.TP
 .BI "\-d [" "image data file" "]"
 Use image data from 'image data file'.
 
 .TP
 .BI "\-x"
 Set XIP (execute in place) flag.
+
+.TP
+.BI "\-s"
+Create an image with no data. The header will be created, but the image itself
+will not contain data (such as U-Boot or any specified kernel).
+
+.TP
+.BI "\-v"
+Verbose. Print file names as they are added to the image.
 
 .P
 .B Create FIT image:
@@ -119,6 +143,11 @@ FIT, with each one aligned to a 4-byte boundary. The existing 'data' property
 in each image will be replaced with 'data-offset' and 'data-size' properties.
 A 'data-offset' of 0 indicates that it starts in the first (4-byte aligned)
 byte after the FIT.
+
+.TP
+.BI "\-B [" "alignment" "]"
+The alignment, in hexadecimal, that external data will be aligned to. This
+option only has an effect when \-E is specified.
 
 .TP
 .BI "\-f [" "image tree source file" " | " "auto" "]"
@@ -156,16 +185,32 @@ verification. Typically the file here is the device tree binary used by
 CONFIG_OF_CONTROL in U-Boot.
 
 .TP
+.BI "\-G [" "key_file" "]"
+Specifies the private key file to use when signing. This option may be used
+instead of \-k.
+
+.TP
+.BI "\-o [" "signing algorithm" "]"
+Specifies the algorithm to be used for signing a FIT image. The default is
+taken from the signature node's 'algo' property.
+
+.TP
 .BI "\-p [" "external position" "]"
 Place external data at a static external position. See \-E. Instead of writing
 a 'data-offset' property defining the offset from the end of the FIT, \-p will
 use 'data-position' as the absolute position from the base of the FIT.
 
 .TP
-.BI "\-r
+.BI "\-r"
 Specifies that keys used to sign the FIT are required. This means that they
 must be verified for the image to boot. Without this option, the verification
 will be optional (useful for testing but not for release).
+
+.TP
+.BI "\-N [" "engine" "]"
+The openssl engine to use when signing and verifying the image. For a complete list of
+available engines, refer to
+.BR engine (1).
 
 .TP
 .BI "\-t

@@ -11,7 +11,7 @@
 #include <log.h>
 #include <reset.h>
 #include <asm/io.h>
-#include <asm/arch/ccu.h>
+#include <clk/sunxi.h>
 #include <linux/bitops.h>
 #include <linux/log2.h>
 
@@ -26,6 +26,9 @@ static int sunxi_set_gate(struct clk *clk, bool on)
 	struct ccu_priv *priv = dev_get_priv(clk->dev);
 	const struct ccu_clk_gate *gate = priv_to_gate(priv, clk->id);
 	u32 reg;
+
+	if ((gate->flags & CCU_CLK_F_DUMMY_GATE))
+		return 0;
 
 	if (!(gate->flags & CCU_CLK_F_IS_VALID)) {
 		printf("%s: (CLK#%ld) unhandled\n", __func__, clk->id);

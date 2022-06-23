@@ -7,6 +7,7 @@
 #include <common.h>
 #include <asm/arch/fsl_serdes.h>
 #include <dm.h>
+#include <asm/global_data.h>
 #include <dm/devres.h>
 #include <errno.h>
 #include <pci_ep.h>
@@ -243,7 +244,7 @@ static int ls_pcie_ep_probe(struct udevice *dev)
 	int ret;
 	u32 svr;
 
-	pcie = devm_kmalloc(dev, sizeof(*pcie), GFP_KERNEL);
+	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
 	if (!pcie)
 		return -ENOMEM;
 
@@ -267,6 +268,10 @@ static int ls_pcie_ep_probe(struct udevice *dev)
 
 	pcie->idx = ((unsigned long)pcie->dbi - PCIE_SYS_BASE_ADDR) /
 		    PCIE_CCSR_SIZE;
+
+	/* This controller is disabled by RCW */
+	if (!is_serdes_configured(PCIE_SRDS_PRTCL(pcie->idx)))
+		return 0;
 
 	pcie->big_endian = fdtdec_get_bool(gd->fdt_blob, dev_of_offset(dev),
 					   "big-endian");

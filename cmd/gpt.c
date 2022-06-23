@@ -38,7 +38,7 @@ static LIST_HEAD(disk_partitions);
  * @param str - pointer to string
  * @param env - pointer to pointer to extracted env
  *
- * @return - zero on successful expand and env is set
+ * Return: - zero on successful expand and env is set
  */
 static int extract_env(const char *str, char **env)
 {
@@ -97,7 +97,7 @@ static int extract_env(const char *str, char **env)
  * @param str - pointer to string with key=values pairs
  * @param key - pointer to the key to search for
  *
- * @return - pointer to allocated string with the value
+ * Return: - pointer to allocated string with the value
  */
 static char *extract_val(const char *str, const char *key)
 {
@@ -134,7 +134,7 @@ static char *extract_val(const char *str, const char *key)
  * @param str - pointer to string with key
  * @param key - pointer to the key to search for
  *
- * @return - true on found key
+ * Return: - true on found key
  */
 static bool found_key(const char *str, const char *key)
 {
@@ -350,17 +350,46 @@ static int get_gpt_info(struct blk_desc *dev_desc)
 }
 
 /* a wrapper to test get_gpt_info */
-static int do_get_gpt_info(struct blk_desc *dev_desc)
+static int do_get_gpt_info(struct blk_desc *dev_desc, char * const namestr)
 {
-	int ret;
+	int numparts;
 
-	ret = get_gpt_info(dev_desc);
-	if (ret > 0) {
-		print_gpt_info();
+	numparts = get_gpt_info(dev_desc);
+
+	if (numparts > 0) {
+		if (namestr) {
+			char disk_guid[UUID_STR_LEN + 1];
+			char *partitions_list;
+			int partlistlen;
+			int ret = -1;
+
+			ret = get_disk_guid(dev_desc, disk_guid);
+			if (ret < 0)
+				return ret;
+
+			partlistlen = calc_parts_list_len(numparts);
+			partitions_list = malloc(partlistlen);
+			if (!partitions_list) {
+				del_gpt_info();
+				return -ENOMEM;
+			}
+			memset(partitions_list, '\0', partlistlen);
+
+			ret = create_gpt_partitions_list(numparts, disk_guid,
+							 partitions_list);
+			if (ret < 0)
+				printf("Error: Could not create partition list string!\n");
+			else
+				env_set(namestr, partitions_list);
+
+			free(partitions_list);
+		} else {
+			print_gpt_info();
+		}
 		del_gpt_info();
 		return 0;
 	}
-	return ret;
+	return numparts;
 }
 #endif
 
@@ -374,7 +403,7 @@ static int do_get_gpt_info(struct blk_desc *dev_desc)
  * @param partitions - pointer to pointer to allocated partitions array
  * @param parts_count - number of partitions
  *
- * @return - zero on success, otherwise error
+ * Return: - zero on success, otherwise error
  *
  */
 static int set_gpt_info(struct blk_desc *dev_desc,
@@ -555,6 +584,15 @@ err:
 	free(parts);
 
 	return errno;
+}
+
+static int gpt_repair(struct blk_desc *blk_dev_desc)
+{
+	int ret = 0;
+
+	ret = gpt_repair_headers(blk_dev_desc);
+
+	return ret;
 }
 
 static int gpt_default(struct blk_desc *blk_dev_desc, const char *str_part)
@@ -940,7 +978,7 @@ static int do_rename_gpt_parts(struct blk_desc *dev_desc, char *subcomm,
  * @param argc
  * @param argv
  *
- * @return zero on success; otherwise error
+ * Return: zero on success; otherwise error
  */
 static int do_gpt(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 {
@@ -956,7 +994,7 @@ static int do_gpt(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 #endif
 		return CMD_RET_USAGE;
 
-	dev = (int)simple_strtoul(argv[3], &ep, 10);
+	dev = (int)dectoul(argv[3], &ep);
 	if (!ep || ep[0] != '\0') {
 		printf("'%s' is not a number\n", argv[3]);
 		return CMD_RET_USAGE;
@@ -968,7 +1006,10 @@ static int do_gpt(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 		return CMD_RET_FAILURE;
 	}
 
-	if ((strcmp(argv[1], "write") == 0) && (argc == 5)) {
+	if (strcmp(argv[1], "repair") == 0) {
+		printf("Repairing GPT: ");
+		ret = gpt_repair(blk_dev_desc);
+	} else if ((strcmp(argv[1], "write") == 0) && (argc == 5)) {
 		printf("Writing GPT: ");
 		ret = gpt_default(blk_dev_desc, argv[4]);
 	} else if ((strcmp(argv[1], "verify") == 0)) {
@@ -982,7 +1023,7 @@ static int do_gpt(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 		ret = do_disk_guid(blk_dev_desc, argv[4]);
 #ifdef CONFIG_CMD_GPT_RENAME
 	} else if (strcmp(argv[1], "read") == 0) {
-		ret = do_get_gpt_info(blk_dev_desc);
+		ret = do_get_gpt_info(blk_dev_desc, (argc == 5) ? argv[4] : NULL);
 	} else if ((strcmp(argv[1], "swap") == 0) ||
 		   (strcmp(argv[1], "rename") == 0)) {
 		ret = do_rename_gpt_parts(blk_dev_desc, argv[1], argv[4], argv[5]);
@@ -1007,6 +1048,8 @@ U_BOOT_CMD(gpt, CONFIG_SYS_MAXARGS, 1, do_gpt,
 	" Restore or verify GPT information on a device connected\n"
 	" to interface\n"
 	" Example usage:\n"
+	" gpt repair mmc 0\n"
+	"    - repair the GPT on the device\n"
 	" gpt write mmc 0 $partitions\n"
 	"    - write the GPT to device\n"
 	" gpt verify mmc 0 $partitions\n"
@@ -1028,8 +1071,9 @@ U_BOOT_CMD(gpt, CONFIG_SYS_MAXARGS, 1, do_gpt,
 	" gpt guid mmc 0 varname\n"
 #ifdef CONFIG_CMD_GPT_RENAME
 	"gpt partition renaming commands:\n"
-	" gpt read <interface> <dev>\n"
+	" gpt read <interface> <dev> [<varname>]\n"
 	"    - read GPT into a data structure for manipulation\n"
+	"    - read GPT partitions into environment variable\n"
 	" gpt swap <interface> <dev> <name1> <name2>\n"
 	"    - change all partitions named name1 to name2\n"
 	"      and vice-versa\n"

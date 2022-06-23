@@ -44,8 +44,6 @@
  *        - Reading data from weird addresses
  */
 
-#define CONFIG_SYS_MONITOR_BASE		CONFIG_SYS_TEXT_BASE
-
 #define SRAM_BASE			0x30000000
 #define SRAM_SIZE			SZ_128K
 
@@ -57,9 +55,7 @@
 
 #define CONFIG_SYS_INIT_SP_ADDR		(CONFIG_SYS_SDRAM_BASE + SZ_32K)
 
-#define CONFIG_SYS_MALLOC_LEN		SZ_64K
 #define CONFIG_SYS_BOOTM_LEN		SZ_128K
-#define CONFIG_SYS_LOAD_ADDR		SRAM_BASE
 
 #define ROM_BASE			CONFIG_SYS_MONITOR_BASE
 #define ROM_SIZE			SZ_256K
@@ -70,11 +66,4 @@
 					CONFIG_SYS_SDRAM_BASE) - \
 					CONFIG_SYS_MALLOC_LEN - \
 					CONFIG_ENV_SIZE
-
-/*
- * Environment
- */
-#define CONFIG_BOOTFILE			"app.bin"
-#define CONFIG_LOADADDR			CONFIG_SYS_LOAD_ADDR
-
 #endif /* _CONFIG_IOT_DEVKIT_H_ */

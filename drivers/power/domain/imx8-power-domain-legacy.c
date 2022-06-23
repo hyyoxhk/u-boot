@@ -8,6 +8,7 @@
 #include <log.h>
 #include <malloc.h>
 #include <power-domain-uclass.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch/power-domain.h>
 #include <dm/device-internal.h>
@@ -79,20 +80,6 @@ int imx8_power_domain_lookup_name(const char *name,
 	}
 
 	debug("%s ok: %s\n", __func__, dev->name);
-
-	return 0;
-}
-
-static int imx8_power_domain_request(struct power_domain *power_domain)
-{
-	debug("%s(power_domain=%p)\n", __func__, power_domain);
-
-	return 0;
-}
-
-static int imx8_power_domain_free(struct power_domain *power_domain)
-{
-	debug("%s(power_domain=%p)\n", __func__, power_domain);
 
 	return 0;
 }
@@ -363,8 +350,6 @@ static const struct udevice_id imx8_power_domain_ids[] = {
 };
 
 struct power_domain_ops imx8_power_domain_ops = {
-	.request = imx8_power_domain_request,
-	.rfree = imx8_power_domain_free,
 	.on = imx8_power_domain_on,
 	.off = imx8_power_domain_off,
 	.of_xlate = imx8_power_domain_of_xlate,

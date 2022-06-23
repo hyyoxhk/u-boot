@@ -12,6 +12,7 @@
 #include <image.h>
 #include <init.h>
 #include <net.h>
+#include <asm/global_data.h>
 #include <linux/bitops.h>
 #include <linux/delay.h>
 
@@ -303,25 +304,12 @@ static void setup_dtemode_uart(void)
 	clrbits_le32((u32 *)(UART4_BASE + UCR3), UCR3_DCD | UCR3_RI);
 	clrbits_le32((u32 *)(UART5_BASE + UCR3), UCR3_DCD | UCR3_RI);
 }
-static void setup_dcemode_uart(void)
-{
-	clrbits_le32((u32 *)(UART1_BASE + UFCR), UFCR_DCEDTE);
-	clrbits_le32((u32 *)(UART2_BASE + UFCR), UFCR_DCEDTE);
-	clrbits_le32((u32 *)(UART4_BASE + UFCR), UFCR_DCEDTE);
-	clrbits_le32((u32 *)(UART5_BASE + UFCR), UFCR_DCEDTE);
-}
 
 static void setup_iomux_dte_uart(void)
 {
 	setup_dtemode_uart();
 	imx_iomux_v3_setup_multiple_pads(uart1_pads_dte,
 					 ARRAY_SIZE(uart1_pads_dte));
-}
-static void setup_iomux_dce_uart(void)
-{
-	setup_dcemode_uart();
-	imx_iomux_v3_setup_multiple_pads(uart1_pads_dce,
-					 ARRAY_SIZE(uart1_pads_dce));
 }
 
 #ifdef CONFIG_USB_EHCI_MX6
@@ -664,11 +652,8 @@ int board_early_init_f(void)
 {
 	imx_iomux_v3_setup_multiple_pads(pwr_intb_pads,
 					 ARRAY_SIZE(pwr_intb_pads));
-#ifndef CONFIG_TDX_APALIS_IMX6_V1_0
 	setup_iomux_dte_uart();
-#else
-	setup_iomux_dce_uart();
-#endif
+
 	return 0;
 }
 
@@ -706,34 +691,14 @@ int board_init(void)
 #ifdef CONFIG_BOARD_LATE_INIT
 int board_late_init(void)
 {
-#if defined(CONFIG_REVISION_TAG) && \
-    defined(CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG)
+#if defined(CONFIG_ENV_VARS_UBOOT_RUNTIME_CONFIG)
 	char env_str[256];
 	u32 rev;
 
-	rev = get_board_rev();
+	rev = get_board_revision();
 	snprintf(env_str, ARRAY_SIZE(env_str), "%.4x", rev);
 	env_set("board_rev", env_str);
-
-#ifndef CONFIG_TDX_APALIS_IMX6_V1_0
-	if ((rev & 0xfff0) == 0x0100) {
-		char *fdt_env;
-
-		/* reconfigure the UART to DCE mode dynamically if on V1.0 HW */
-		setup_iomux_dce_uart();
-
-		/* if using the default device tree, use version for V1.0 HW */
-		fdt_env = env_get("fdt_file");
-		if ((fdt_env != NULL) && (strcmp(FDT_FILE, fdt_env) == 0)) {
-			env_set("fdt_file", FDT_FILE_V1_0);
-			printf("patching fdt_file to " FDT_FILE_V1_0 "\n");
-#ifndef CONFIG_ENV_IS_NOWHERE
-			env_save();
-#endif
-		}
-	}
-#endif /* CONFIG_TDX_APALIS_IMX6_V1_0 */
-#endif /* CONFIG_REVISION_TAG */
+#endif /* CONFIG_BOARD_LATE_INIT */
 
 #ifdef CONFIG_CMD_USB_SDP
 	if (is_boot_from_usb()) {
@@ -1076,6 +1041,24 @@ static void ddr_init(int *table, int size)
 		writel(table[2 * i + 1], table[2 * i]);
 }
 
+/* Perform DDR DRAM calibration */
+static void spl_dram_perform_cal(void)
+{
+#ifdef CONFIG_MX6_DDRCAL
+	int err;
+	struct mx6_ddr_sysinfo ddr_sysinfo = {
+		.dsize = 2,
+	};
+
+	err = mmdc_do_write_level_calibration(&ddr_sysinfo);
+	if (err)
+		printf("error %d from write level calibration\n", err);
+	err = mmdc_do_dqs_calibration(&ddr_sysinfo);
+	if (err)
+		printf("error %d from dqs calibration\n", err);
+#endif
+}
+
 static void spl_dram_init(void)
 {
 	int minc, maxc;
@@ -1094,6 +1077,7 @@ static void spl_dram_init(void)
 		break;
 	};
 	udelay(100);
+	spl_dram_perform_cal();
 }
 
 void board_init_f(ulong dummy)
@@ -1113,10 +1097,8 @@ void board_init_f(ulong dummy)
 	/* UART clocks enabled and gd valid - init serial console */
 	preloader_console_init();
 
-#ifndef CONFIG_TDX_APALIS_IMX6_V1_0
 	/* Make sure we use dte mode */
 	setup_dtemode_uart();
-#endif
 
 	/* DDR initialization */
 	spl_dram_init();
@@ -1138,7 +1120,7 @@ int board_fit_config_name_match(const char *name)
 }
 #endif
 
-void reset_cpu(ulong addr)
+void reset_cpu(void)
 {
 }
 

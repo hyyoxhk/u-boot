@@ -28,25 +28,6 @@
 #define debug_buffer(x, ...)
 #endif
 
-/**
- * struct sandbox_i2c_rtc_plat_data - platform data for the RTC
- *
- * @base_time:		Base system time when RTC device was bound
- * @offset:		RTC offset from current system time
- * @use_system_time:	true to use system time, false to use @base_time
- * @reg:		Register values
- */
-struct sandbox_i2c_rtc_plat_data {
-	long base_time;
-	long offset;
-	bool use_system_time;
-	u8 reg[REG_COUNT];
-};
-
-struct sandbox_i2c_rtc {
-	unsigned int offset_secs;
-};
-
 long sandbox_i2c_rtc_set_offset(struct udevice *dev, bool use_system_time,
 				int offset)
 {
@@ -57,6 +38,7 @@ long sandbox_i2c_rtc_set_offset(struct udevice *dev, bool use_system_time,
 	plat->use_system_time = use_system_time;
 	if (offset != -1)
 		plat->offset = offset;
+	os_set_time_offset(plat->offset);
 
 	return old_offset;
 }
@@ -80,7 +62,7 @@ static void reset_time(struct udevice *dev)
 
 	os_localtime(&now);
 	plat->base_time = rtc_mktime(&now);
-	plat->offset = 0;
+	plat->offset = os_get_time_offset();
 	plat->use_system_time = true;
 }
 
@@ -115,6 +97,7 @@ static int sandbox_i2c_rtc_set(struct udevice *dev, const struct rtc_time *time)
 		now = plat->base_time;
 	}
 	plat->offset = rtc_mktime(time) - now;
+	os_set_time_offset(plat->offset);
 
 	return 0;
 }
@@ -221,7 +204,7 @@ static int sandbox_i2c_rtc_bind(struct udevice *dev)
 }
 
 static const struct udevice_id sandbox_i2c_rtc_ids[] = {
-	{ .compatible = "sandbox,i2c-rtc" },
+	{ .compatible = "sandbox,i2c-rtc-emul" },
 	{ }
 };
 

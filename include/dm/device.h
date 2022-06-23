@@ -71,12 +71,25 @@ struct driver_info;
  * Device is removed without switching off its power domain. This might
  * be required, i. e. for serial console (debug) output when booting OS.
  */
-#define DM_FLAG_REMOVE_WITH_PD_ON	(1 << 13)
+#define DM_FLAG_LEAVE_PD_ON		(1 << 13)
+
+/*
+ * Device is vital to the operation of other devices. It is possible to remove
+ * removed this device after all regular devices are removed. This is useful
+ * e.g. for clock, which need to be active during the device-removal phase.
+ */
+#define DM_FLAG_VITAL			(1 << 14)
+
+/* Device must be probed after it was bound */
+#define DM_FLAG_PROBE_AFTER_BIND	(1 << 15)
 
 /*
  * One or multiple of these flags are passed to device_remove() so that
  * a selective device removal as specified by the remove-stage and the
  * driver flags can be done.
+ *
+ * DO NOT use these flags in your driver's @flags value...
+ *	use the above DM_FLAG_... values instead
  */
 enum {
 	/* Normal remove, remove all devices */
@@ -88,7 +101,8 @@ enum {
 	/* Remove devices which need some final OS preparation steps */
 	DM_REMOVE_OS_PREPARE	= DM_FLAG_OS_PREPARE,
 
-	/* Add more use cases here */
+	/* Remove only devices that are not marked vital */
+	DM_REMOVE_NON_VITAL	= DM_FLAG_VITAL,
 
 	/* Remove devices with any active flag */
 	DM_REMOVE_ACTIVE_ALL	= DM_REMOVE_ACTIVE_DMA | DM_REMOVE_OS_PREPARE,
@@ -111,7 +125,7 @@ enum {
  * probe method if the device has a device tree node.
  *
  * All three of plat, priv and uclass_priv can be allocated by the
- * driver, or you can use the auto_alloc_size members of struct driver and
+ * driver, or you can use the auto members of struct driver and
  * struct uclass_driver to have driver model do this automatically.
  *
  * @driver: The driver used by this device
@@ -134,7 +148,7 @@ enum {
  * @uclass_node: Used by uclass to link its devices
  * @child_head: List of children of this device
  * @sibling_node: Next device in list of all devices
- * @flags_: Flags for this device DM_FLAG_... (do not access outside driver
+ * @flags_: Flags for this device `DM_FLAG_...` (do not access outside driver
  *	model)
  * @seq_: Allocated sequence number for this device (-1 = none). This is set up
  * when the device is bound and is unique within the device's uclass. If the
@@ -148,6 +162,8 @@ enum {
  *		When CONFIG_DEVRES is enabled, devm_kmalloc() and friends will
  *		add to this list. Memory so-allocated will be freed
  *		automatically when the device is removed / unbound
+ * @dma_offset: Offset between the physical address space (CPU's) and the
+ *		device's bus address space
  */
 struct udevice {
 	const struct driver *driver;
@@ -164,22 +180,56 @@ struct udevice {
 	struct list_head uclass_node;
 	struct list_head child_head;
 	struct list_head sibling_node;
+#if !CONFIG_IS_ENABLED(OF_PLATDATA_RT)
 	u32 flags_;
+#endif
 	int seq_;
-#if !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 	ofnode node_;
 #endif
-#ifdef CONFIG_DEVRES
+#if CONFIG_IS_ENABLED(DEVRES)
 	struct list_head devres_head;
+#endif
+#if CONFIG_IS_ENABLED(DM_DMA)
+	ulong dma_offset;
 #endif
 };
 
-/* Maximum sequence number supported */
+static inline int dm_udevice_size(void)
+{
+	if (CONFIG_IS_ENABLED(OF_PLATDATA_RT))
+		return ALIGN(sizeof(struct udevice), CONFIG_LINKER_LIST_ALIGN);
+
+	return sizeof(struct udevice);
+}
+
+/**
+ * struct udevice_rt - runtime information set up by U-Boot
+ *
+ * This is only used with OF_PLATDATA_RT
+ *
+ * There is one of these for every udevice in the linker list, indexed by
+ * the udevice_info idx value.
+ *
+ * @flags_: Flags for this device `DM_FLAG_...` (do not access outside driver
+ *	model)
+ */
+struct udevice_rt {
+	u32 flags_;
+};
+
+/* Maximum sequence number supported and associated string length */
 #define DM_MAX_SEQ	999
+#define DM_MAX_SEQ_STR	3
 
 /* Returns the operations for a device */
-#define device_get_ops(dev)	(dev->driver->ops)
+#define device_get_ops(dev)	((dev)->driver->ops)
 
+#if CONFIG_IS_ENABLED(OF_PLATDATA_RT)
+u32 dev_get_flags(const struct udevice *dev);
+void dev_or_flags(const struct udevice *dev, u32 or);
+void dev_bic_flags(const struct udevice *dev, u32 bic);
+#else
 static inline u32 dev_get_flags(const struct udevice *dev)
 {
 	return dev->flags_;
@@ -194,16 +244,17 @@ static inline void dev_bic_flags(struct udevice *dev, u32 bic)
 {
 	dev->flags_ &= ~bic;
 }
+#endif /* OF_PLATDATA_RT */
 
 /**
  * dev_ofnode() - get the DT node reference associated with a udevice
  *
  * @dev:	device to check
- * @return reference of the the device's DT node
+ * Return: reference of the device's DT node
  */
 static inline ofnode dev_ofnode(const struct udevice *dev)
 {
-#if !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 	return dev->node_;
 #else
 	return ofnode_null();
@@ -213,9 +264,17 @@ static inline ofnode dev_ofnode(const struct udevice *dev)
 /* Returns non-zero if the device is active (probed and not removed) */
 #define device_active(dev)	(dev_get_flags(dev) & DM_FLAG_ACTIVATED)
 
+#if CONFIG_IS_ENABLED(DM_DMA)
+#define dev_set_dma_offset(_dev, _offset)	_dev->dma_offset = _offset
+#define dev_get_dma_offset(_dev)		_dev->dma_offset
+#else
+#define dev_set_dma_offset(_dev, _offset)
+#define dev_get_dma_offset(_dev)		0
+#endif
+
 static inline int dev_of_offset(const struct udevice *dev)
 {
-#if !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 	return ofnode_to_offset(dev_ofnode(dev));
 #else
 	return -1;
@@ -224,7 +283,7 @@ static inline int dev_of_offset(const struct udevice *dev)
 
 static inline bool dev_has_ofnode(const struct udevice *dev)
 {
-#if !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 	return ofnode_valid(dev_ofnode(dev));
 #else
 	return false;
@@ -233,7 +292,7 @@ static inline bool dev_has_ofnode(const struct udevice *dev)
 
 static inline void dev_set_ofnode(struct udevice *dev, ofnode node)
 {
-#if !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 	dev->node_ = node;
 #endif
 }
@@ -253,7 +312,7 @@ struct udevice_id {
 	ulong data;
 };
 
-#if CONFIG_IS_ENABLED(OF_CONTROL) && !CONFIG_IS_ENABLED(OF_PLATDATA)
+#if CONFIG_IS_ENABLED(OF_REAL)
 #define of_match_ptr(_ptr)	(_ptr)
 #else
 #define of_match_ptr(_ptr)	NULL
@@ -303,7 +362,7 @@ struct udevice_id {
  * @ops: Driver-specific operations. This is typically a list of function
  * pointers defined by the driver, to implement driver functions required by
  * the uclass.
- * @flags: driver flags - see DM_FLAGS_...
+ * @flags: driver flags - see `DM_FLAGS_...`
  * @acpi_ops: Advanced Configuration and Power Interface (ACPI) operations,
  * allowing the device to add things to the ACPI tables passed to Linux
  */
@@ -330,28 +389,106 @@ struct driver {
 #endif
 };
 
-/* Declare a new U-Boot driver */
+/**
+ * U_BOOT_DRIVER() - Declare a new U-Boot driver
+ * @__name: name of the driver
+ */
 #define U_BOOT_DRIVER(__name)						\
 	ll_entry_declare(struct driver, __name, driver)
 
-/* Get a pointer to a given driver */
+/**
+ * DM_DRIVER_GET() - Get a pointer to a given driver
+ *
+ * This is useful in code for referencing a driver at build time.
+ * Before this is used, an extern U_BOOT_DRIVER() must have been
+ * declared.
+ *
+ * @__name:	Name of the driver. This must be a valid C identifier,
+ * used by the linker_list
+ * Return: struct driver * for the driver
+ */
 #define DM_DRIVER_GET(__name)						\
 	ll_entry_get(struct driver, __name, driver)
 
 /**
- * Declare a macro to state a alias for a driver name. This macro will
- * produce no code but its information will be parsed by tools like
- * dtoc
+ * DM_DRIVER_REF() - Get a reference to a driver
+ *
+ * This is useful in data structures and code for referencing a driver at
+ * build time. Before this is used, an extern U_BOOT_DRIVER() must have been
+ * declared.
+ * This is like DM_DRIVER_GET, but without the extra code, so it is suitable
+ * for putting into data structures.
+ *
+ * For example::
+ *
+ *   extern U_BOOT_DRIVER(sandbox_fixed_clock);
+ *   struct driver *drvs[] = {
+ *       DM_DRIVER_REF(sandbox_fixed_clock),
+ *   };
+ *
+ * @_name:	Name of the driver. This must be a valid C identifier,
+ * used by the linker_list
+ * Return: struct driver * for the driver
+ */
+#define DM_DRIVER_REF(_name)					\
+	ll_entry_ref(struct driver, _name, driver)
+
+/**
+ * DM_DRIVER_ALIAS() - Declare a macro to state an alias for a driver name
+ *
+ * This macro will produce no code but its information will be parsed by tools
+ * like dtoc
+ *
+ * @__name:	name of driver
+ * @__alias:	alias for the driver name
  */
 #define DM_DRIVER_ALIAS(__name, __alias)
+
+/**
+ * DM_PHASE() - Declare a macro to indicate which phase of U-Boot this driver is for.
+ *
+ * This macro produces no code but its information will be parsed by dtoc. The
+ * macro can be only be used once in a driver. Put it within the U_BOOT_DRIVER()
+ * declaration, e.g.::
+ *
+ *   U_BOOT_DRIVER(cpu) = {
+ *       .name = ...
+ *       ...
+ *       DM_PHASE(tpl)
+ *   };
+ *
+ * @_phase:	Associated phase of U-Boot ("spl", "tpl")
+ */
+#define DM_PHASE(_phase)
+
+/**
+ * DM_HEADER() - Declare a macro to declare a header needed for a driver.
+ *
+ * Often the correct header can be found automatically, but only for struct
+ * declarations. For enums and #defines used in the driver declaration and
+ * declared in a different header from the structs, this macro must be used.
+ *
+ * This macro produces no code but its information will be parsed by dtoc. The
+ * macro can be used multiple times with different headers, for the same driver.
+ * Put it within the U_BOOT_DRIVER() declaration, e.g.::
+ *
+ *   U_BOOT_DRIVER(cpu) = {
+ *       .name = ...
+ *       ...
+ *       DM_HEADER(<asm/cpu.h>)
+ *   };
+ *
+ * @_hdr:	header needed for a driver
+ */
+#define DM_HEADER(_hdr)
 
 /**
  * dev_get_plat() - Get the platform data for a device
  *
  * This checks that dev is not NULL, but no other checks for now
  *
- * @dev		Device to check
- * @return platform data, or NULL if none
+ * @dev:	Device to check
+ * Return: platform data, or NULL if none
  */
 void *dev_get_plat(const struct udevice *dev);
 
@@ -360,8 +497,8 @@ void *dev_get_plat(const struct udevice *dev);
  *
  * This checks that dev is not NULL, but no other checks for now
  *
- * @dev		Device to check
- * @return parent's platform data, or NULL if none
+ * @dev:	Device to check
+ * Return: parent's platform data, or NULL if none
  */
 void *dev_get_parent_plat(const struct udevice *dev);
 
@@ -370,8 +507,8 @@ void *dev_get_parent_plat(const struct udevice *dev);
  *
  * This checks that dev is not NULL, but no other checks for now
  *
- * @dev		Device to check
- * @return uclass's platform data, or NULL if none
+ * @dev:	Device to check
+ * Return: uclass's platform data, or NULL if none
  */
 void *dev_get_uclass_plat(const struct udevice *dev);
 
@@ -380,8 +517,8 @@ void *dev_get_uclass_plat(const struct udevice *dev);
  *
  * This checks that dev is not NULL, but no other checks for now
  *
- * @dev		Device to check
- * @return private data, or NULL if none
+ * @dev:	Device to check
+ * Return: private data, or NULL if none
  */
 void *dev_get_priv(const struct udevice *dev);
 
@@ -394,8 +531,8 @@ void *dev_get_priv(const struct udevice *dev);
  *
  * This checks that dev is not NULL, but no other checks for now
  *
- * @dev		Device to check
- * @return parent data, or NULL if none
+ * @dev:	Device to check
+ * Return: parent data, or NULL if none
  */
 void *dev_get_parent_priv(const struct udevice *dev);
 
@@ -404,16 +541,16 @@ void *dev_get_parent_priv(const struct udevice *dev);
  *
  * This checks that dev is not NULL, but no other checks for now
  *
- * @dev		Device to check
- * @return private uclass data for this device, or NULL if none
+ * @dev:	Device to check
+ * Return: private uclass data for this device, or NULL if none
  */
 void *dev_get_uclass_priv(const struct udevice *dev);
 
 /**
- * struct dev_get_parent() - Get the parent of a device
+ * dev_get_parent() - Get the parent of a device
  *
  * @child:	Child to check
- * @return parent of child, or NULL if this is the root device
+ * Return: parent of child, or NULL if this is the root device
  */
 struct udevice *dev_get_parent(const struct udevice *child);
 
@@ -425,13 +562,14 @@ struct udevice *dev_get_parent(const struct udevice *child);
  * returns the associated data value for that compatible string. This is
  * the 'data' field in struct udevice_id.
  *
- * As an example, consider this structure:
- * static const struct udevice_id tegra_i2c_ids[] = {
- *	{ .compatible = "nvidia,tegra114-i2c", .data = TYPE_114 },
- *	{ .compatible = "nvidia,tegra20-i2c", .data = TYPE_STD },
- *	{ .compatible = "nvidia,tegra20-i2c-dvc", .data = TYPE_DVC },
- *	{ }
- * };
+ * As an example, consider this structure::
+ *
+ *  static const struct udevice_id tegra_i2c_ids[] = {
+ *      { .compatible = "nvidia,tegra114-i2c", .data = TYPE_114 },
+ *      { .compatible = "nvidia,tegra20-i2c", .data = TYPE_STD },
+ *      { .compatible = "nvidia,tegra20-i2c-dvc", .data = TYPE_DVC },
+ *      { }
+ *  };
  *
  * When driver model finds a driver for this it will store the 'data' value
  * corresponding to the compatible string it matches. This function returns
@@ -440,7 +578,7 @@ struct udevice *dev_get_parent(const struct udevice *child);
  * For USB devices, this is the driver_info field in struct usb_device_id.
  *
  * @dev:	Device to check
- * @return driver data (0 if none is provided)
+ * Return: driver data (0 if none is provided)
  */
 ulong dev_get_driver_data(const struct udevice *dev);
 
@@ -451,7 +589,7 @@ ulong dev_get_driver_data(const struct udevice *dev);
  * driver's operations.
  *
  * @dev:	Device to check
- * @return void pointer to driver's operations or NULL for NULL-dev or NULL-ops
+ * Return: void pointer to driver's operations or NULL for NULL-dev or NULL-ops
  */
 const void *dev_get_driver_ops(const struct udevice *dev);
 
@@ -459,7 +597,7 @@ const void *dev_get_driver_ops(const struct udevice *dev);
  * device_get_uclass_id() - return the uclass ID of a device
  *
  * @dev:	Device to check
- * @return uclass ID for the device
+ * Return: uclass ID for the device
  */
 enum uclass_id device_get_uclass_id(const struct udevice *dev);
 
@@ -469,7 +607,7 @@ enum uclass_id device_get_uclass_id(const struct udevice *dev);
  * This checks that dev is not NULL.
  *
  * @dev:	Device to check
- * @return  pointer to the uclass name for the device
+ * Return:  pointer to the uclass name for the device
  */
 const char *dev_get_uclass_name(const struct udevice *dev);
 
@@ -479,23 +617,32 @@ const char *dev_get_uclass_name(const struct udevice *dev);
  * Returns the numbered child, 0 being the first. This does not use
  * sequence numbers, only the natural order.
  *
- * @dev:	Parent device to check
+ * @parent:	Parent device to check
  * @index:	Child index
  * @devp:	Returns pointer to device
- * @return 0 if OK, -ENODEV if no such device, other error if the device fails
- *	   to probe
+ * Return:
+ * 0 if OK, -ENODEV if no such device, other error if the device fails to probe
  */
 int device_get_child(const struct udevice *parent, int index,
 		     struct udevice **devp);
 
 /**
- * device_get_child_count() - Get the available child count of a device
+ * device_get_child_count() - Get the child count of a device
  *
  * Returns the number of children to a device.
  *
  * @parent:	Parent device to check
  */
 int device_get_child_count(const struct udevice *parent);
+
+/**
+ * device_get_decendent_count() - Get the total number of decendents of a device
+ *
+ * Returns the total number of decendents, including all children
+ *
+ * @parent:	Parent device to check
+ */
+int device_get_decendent_count(const struct udevice *parent);
 
 /**
  * device_find_child_by_seq() - Find a child device based on a sequence
@@ -506,7 +653,7 @@ int device_get_child_count(const struct udevice *parent);
  * @seq: Sequence number to find (0=first)
  * @devp: Returns pointer to device (there is only one per for each seq).
  * Set to NULL if none is found
- * @return 0 if OK, -ENODEV if not found
+ * Return: 0 if OK, -ENODEV if not found
  */
 int device_find_child_by_seq(const struct udevice *parent, int seq,
 			     struct udevice **devp);
@@ -524,7 +671,7 @@ int device_find_child_by_seq(const struct udevice *parent, int seq,
  * @seq: Sequence number to find (0=first)
  * @devp: Returns pointer to device (there is only one per for each seq)
  * Set to NULL if none is found
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 int device_get_child_by_seq(const struct udevice *parent, int seq,
 			    struct udevice **devp);
@@ -537,7 +684,7 @@ int device_get_child_by_seq(const struct udevice *parent, int seq,
  * @parent: Parent device
  * @of_offset: Device tree offset to find
  * @devp: Returns pointer to device if found, otherwise this is set to NULL
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 int device_find_child_by_of_offset(const struct udevice *parent, int of_offset,
 				   struct udevice **devp);
@@ -552,7 +699,7 @@ int device_find_child_by_of_offset(const struct udevice *parent, int of_offset,
  * @parent: Parent device
  * @of_offset: Device tree offset to find
  * @devp: Returns pointer to device if found, otherwise this is set to NULL
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 int device_get_child_by_of_offset(const struct udevice *parent, int of_offset,
 				  struct udevice **devp);
@@ -567,7 +714,7 @@ int device_get_child_by_of_offset(const struct udevice *parent, int of_offset,
  *
  * @node: Device tree ofnode to find
  * @devp: Returns pointer to device if found, otherwise this is set to NULL
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 
 int device_find_global_by_ofnode(ofnode node, struct udevice **devp);
@@ -582,45 +729,36 @@ int device_find_global_by_ofnode(ofnode node, struct udevice **devp);
  *
  * @node: Device tree ofnode to find
  * @devp: Returns pointer to device if found, otherwise this is set to NULL
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 int device_get_global_by_ofnode(ofnode node, struct udevice **devp);
 
 /**
- * device_get_by_driver_info() - Get a device based on driver_info
+ * device_get_by_ofplat_idx() - Get a device based on of-platdata index
  *
- * Locates a device by its struct driver_info, by using its reference which
- * is updated during the bind process.
+ * Locates a device by either its struct driver_info index, or its
+ * struct udevice index. The latter is used with OF_PLATDATA_INST, since we have
+ * a list of build-time instantiated struct udevice records, The former is used
+ * with !OF_PLATDATA_INST since in that case we have a list of
+ * struct driver_info records.
  *
- * The device is probed to activate it ready for use.
- *
- * @info: Struct driver_info
- * @devp: Returns pointer to device if found, otherwise this is set to NULL
- * @return 0 if OK, -ve on error
- */
-int device_get_by_driver_info(const struct driver_info *info,
-			      struct udevice **devp);
-
-/**
- * device_get_by_driver_info_idx() - Get a device based on driver_info index
- *
- * Locates a device by its struct driver_info, by using its index number which
- * is written into the idx field of struct phandle_1_arg, etc.
+ * The index number is written into the idx field of struct phandle_1_arg, etc.
+ * It is the position of this driver_info/udevice in its linker list.
  *
  * The device is probed to activate it ready for use.
  *
- * @idx: Index number of the driver_info structure (0=first)
+ * @idx: Index number of the driver_info/udevice structure (0=first)
  * @devp: Returns pointer to device if found, otherwise this is set to NULL
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
-int device_get_by_driver_info_idx(uint idx, struct udevice **devp);
+int device_get_by_ofplat_idx(uint idx, struct udevice **devp);
 
 /**
  * device_find_first_child() - Find the first child of a device
  *
  * @parent: Parent device to search
  * @devp: Returns first child device, or NULL if none
- * @return 0
+ * Return: 0
  */
 int device_find_first_child(const struct udevice *parent,
 			    struct udevice **devp);
@@ -630,7 +768,7 @@ int device_find_first_child(const struct udevice *parent,
  *
  * @devp: Pointer to previous child device on entry. Returns pointer to next
  *		child device, or NULL if none
- * @return 0
+ * Return: 0
  */
 int device_find_next_child(struct udevice **devp);
 
@@ -644,8 +782,8 @@ int device_find_next_child(struct udevice **devp);
  *
  * @parent:	Parent device to search
  * @uclass_id:	Uclass to look for
- * @devp:	Returns device found, if any
- * @return 0 if found, else -ENODEV
+ * @devp:	Returns device found, if any, else NULL
+ * Return: 0 if found, else -ENODEV
  */
 int device_find_first_inactive_child(const struct udevice *parent,
 				     enum uclass_id uclass_id,
@@ -656,12 +794,24 @@ int device_find_first_inactive_child(const struct udevice *parent,
  *
  * @parent: Parent device to search
  * @uclass_id:	Uclass to look for
- * @devp: Returns first child device in that uclass, if any
- * @return 0 if found, else -ENODEV
+ * @devp: Returns first child device in that uclass, if any, else NULL
+ * Return: 0 if found, else -ENODEV
  */
 int device_find_first_child_by_uclass(const struct udevice *parent,
 				      enum uclass_id uclass_id,
 				      struct udevice **devp);
+
+/**
+ * device_find_child_by_namelen() - Find a child by device name
+ *
+ * @parent:	Parent device to search
+ * @name:	Name to look for
+ * @len:	Length of the name
+ * @devp:	Returns device found, if any
+ * Return: 0 if found, else -ENODEV
+ */
+int device_find_child_by_namelen(const struct udevice *parent, const char *name,
+				 int len, struct udevice **devp);
 
 /**
  * device_find_child_by_name() - Find a child by device name
@@ -669,7 +819,7 @@ int device_find_first_child_by_uclass(const struct udevice *parent,
  * @parent:	Parent device to search
  * @name:	Name to look for
  * @devp:	Returns device found, if any
- * @return 0 if found, else -ENODEV
+ * Return: 0 if found, else -ENODEV
  */
 int device_find_child_by_name(const struct udevice *parent, const char *name,
 			      struct udevice **devp);
@@ -682,7 +832,7 @@ int device_find_child_by_name(const struct udevice *parent, const char *name,
  *
  * @parent: Parent to check
  * @devp: Returns child that was found, if any
- * @return 0 on success, -ENODEV if no children, other -ve on error
+ * Return: 0 on success, -ENODEV if no children, other -ve on error
  */
 int device_first_child_ofdata_err(struct udevice *parent,
 				  struct udevice **devp);
@@ -695,7 +845,7 @@ int device_first_child_ofdata_err(struct udevice *parent,
  *
  * @devp: On entry, points to the previous child; on exit returns the child that
  *	was found, if any
- * @return 0 on success, -ENODEV if no children, other -ve on error
+ * Return: 0 on success, -ENODEV if no children, other -ve on error
  */
 int device_next_child_ofdata_err(struct udevice **devp);
 
@@ -706,7 +856,7 @@ int device_next_child_ofdata_err(struct udevice **devp);
  *
  * @parent:	Parent device to search
  * @devp:	Returns device found, if any
- * @return 0 if found, -ENODEV if not, -ve error if device failed to probe
+ * Return: 0 if found, -ENODEV if not, -ve error if device failed to probe
  */
 int device_first_child_err(struct udevice *parent, struct udevice **devp);
 
@@ -717,7 +867,7 @@ int device_first_child_err(struct udevice *parent, struct udevice **devp);
  *
  * @devp: On entry, pointer to device to lookup. On exit, returns pointer
  * to the next sibling if no error occurred
- * @return 0 if found, -ENODEV if not, -ve error if device failed to probe
+ * Return: 0 if found, -ENODEV if not, -ve error if device failed to probe
  */
 int device_next_child_err(struct udevice **devp);
 
@@ -725,7 +875,7 @@ int device_next_child_err(struct udevice **devp);
  * device_has_children() - check if a device has any children
  *
  * @dev:	Device to check
- * @return true if the device has one or more children
+ * Return: true if the device has one or more children
  */
 bool device_has_children(const struct udevice *dev);
 
@@ -733,7 +883,7 @@ bool device_has_children(const struct udevice *dev);
  * device_has_active_children() - check if a device has any active children
  *
  * @dev:	Device to check
- * @return true if the device has one or more children and at least one of
+ * Return: true if the device has one or more children and at least one of
  * them is active (probed).
  */
 bool device_has_active_children(const struct udevice *dev);
@@ -746,7 +896,7 @@ bool device_has_active_children(const struct udevice *dev);
  * view of devices is being displayed.
  *
  * @dev:	Device to check
- * @return true if there are no more siblings after this one - i.e. is it
+ * Return: true if there are no more siblings after this one - i.e. is it
  * last in the list.
  */
 bool device_is_last_sibling(const struct udevice *dev);
@@ -764,7 +914,7 @@ bool device_is_last_sibling(const struct udevice *dev);
  * @dev:	Device to update
  * @name:	New name (this string is allocated new memory and attached to
  *		the device)
- * @return 0 if OK, -ENOMEM if there is not enough memory to allocate the
+ * Return: 0 if OK, -ENOMEM if there is not enough memory to allocate the
  * string
  */
 int device_set_name(struct udevice *dev, const char *name);
@@ -787,7 +937,7 @@ void device_set_name_alloced(struct udevice *dev);
  * @dev:	udevice pointer for which compatible needs to be verified.
  * @compat:	Compatible string which needs to verified in the given
  *		device
- * @return true if OK, false if the compatible is not found
+ * Return: true if OK, false if the compatible is not found
  */
 bool device_is_compatible(const struct udevice *dev, const char *compat);
 
@@ -798,7 +948,7 @@ bool device_is_compatible(const struct udevice *dev, const char *compat);
  * This allows to check whether the machine is comaptible with the compat.
  *
  * @compat:	Compatible string which needs to verified
- * @return true if OK, false if the compatible is not found
+ * Return: true if OK, false if the compatible is not found
  */
 bool of_machine_is_compatible(const char *compat);
 
@@ -806,7 +956,7 @@ bool of_machine_is_compatible(const char *compat);
  * dev_disable_by_path() - Disable a device given its device tree path
  *
  * @path:	The device tree path identifying the device to be disabled
- * @return 0 on success, -ve on error
+ * Return: 0 on success, -ve on error
  */
 int dev_disable_by_path(const char *path);
 
@@ -814,7 +964,7 @@ int dev_disable_by_path(const char *path);
  * dev_enable_by_path() - Enable a device given its device tree path
  *
  * @path:	The device tree path identifying the device to be enabled
- * @return 0 on success, -ve on error
+ * Return: 0 on success, -ve on error
  */
 int dev_enable_by_path(const char *path);
 
@@ -822,7 +972,7 @@ int dev_enable_by_path(const char *path);
  * device_is_on_pci_bus - Test if a device is on a PCI bus
  *
  * @dev:	device to test
- * @return:	true if it is on a PCI bus, false otherwise
+ * Return:	true if it is on a PCI bus, false otherwise
  */
 static inline bool device_is_on_pci_bus(const struct udevice *dev)
 {
@@ -855,7 +1005,7 @@ static inline bool device_is_on_pci_bus(const struct udevice *dev)
  *
  * This stops when it gets an error, with @pos set to the device that failed to
  * read ofdata.
-
+ *
  * This creates a for() loop which works through the available children of
  * a device in order from start to end. Device ofdata is read by calling
  * device_of_to_plat() on each one. The devices are not probed.
@@ -864,8 +1014,8 @@ static inline bool device_is_on_pci_bus(const struct udevice *dev)
  * @parent: parent device to scan
  */
 #define device_foreach_child_of_to_plat(pos, parent)	\
-	for (int _ret = device_first_child_ofdata_err(parent, &dev); !_ret; \
-	     _ret = device_next_child_ofdata_err(&dev))
+	for (int _ret = device_first_child_ofdata_err(parent, &pos); !_ret; \
+	     _ret = device_next_child_ofdata_err(&pos))
 
 /**
  * device_foreach_child_probe() - iterate through children, probing them
@@ -881,8 +1031,8 @@ static inline bool device_is_on_pci_bus(const struct udevice *dev)
  * @parent: parent device to scan
  */
 #define device_foreach_child_probe(pos, parent)	\
-	for (int _ret = device_first_child_err(parent, &dev); !_ret; \
-	     _ret = device_next_child_err(&dev))
+	for (int _ret = device_first_child_err(parent, &pos); !_ret; \
+	     _ret = device_next_child_err(&pos))
 
 /**
  * dm_scan_fdt_dev() - Bind child device in the device tree
@@ -896,7 +1046,7 @@ static inline bool device_is_on_pci_bus(const struct udevice *dev)
  * be bound.
  *
  * @dev:	Device to scan
- * @return 0 if OK, -ve on error
+ * Return: 0 if OK, -ve on error
  */
 int dm_scan_fdt_dev(struct udevice *dev);
 

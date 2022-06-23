@@ -15,6 +15,7 @@
 #include <part.h>
 #include <linux/sizes.h>
 #include <asm/arch/mem.h>
+#include <asm/global_data.h>
 #include <dm/device-internal.h>
 #include <dm/uclass-internal.h>
 
@@ -212,5 +213,5 @@ U_BOOT_DRIVER(meson_vpu) = {
 	.probe = meson_vpu_probe,
 	.bind = meson_vpu_bind,
 	.priv_auto	= sizeof(struct meson_vpu_priv),
-	.flags  = DM_FLAG_PRE_RELOC | DM_FLAG_REMOVE_WITH_PD_ON,
+	.flags  = DM_FLAG_PRE_RELOC | DM_FLAG_LEAVE_PD_ON,
 };

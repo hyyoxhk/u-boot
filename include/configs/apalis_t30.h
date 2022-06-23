@@ -23,13 +23,8 @@
 #define CONFIG_TEGRA_ENABLE_UARTA
 #define CONFIG_SYS_NS16550_COM1		NV_PA_APB_UARTA_BASE
 
-#define CONFIG_MACH_TYPE		MACH_TYPE_APALIS_T30
-
 /* PCI networking support */
 #define CONFIG_E1000_NO_NVM
-
-/* General networking support */
-#define CONFIG_TFTP_TSIZE
 
 /* Increase console I/O buffer size */
 #undef CONFIG_SYS_CBSIZE
@@ -52,9 +47,9 @@
 		"mmc write ${loadaddr} ${uboot_blk} ${blkcnt}\0" \
 
 #define BOARD_EXTRA_ENV_SETTINGS \
-	UBOOT_UPDATE
+	UBOOT_UPDATE \
+	"boot_script_dhcp=boot.scr\0"
 
-#include "tegra-common-usb-gadget.h"
 #include "tegra-common-post.h"
 
 #endif /* __CONFIG_H */

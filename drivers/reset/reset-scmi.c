@@ -2,6 +2,9 @@
 /*
  * Copyright (C) 2019-2020 Linaro Limited
  */
+
+#define LOG_CATEGORY UCLASS_RESET
+
 #include <common.h>
 #include <dm.h>
 #include <errno.h>
@@ -23,7 +26,7 @@ static int scmi_reset_set_level(struct reset_ctl *rst, bool assert_not_deassert)
 					  in, out);
 	int ret;
 
-	ret = devm_scmi_process_msg(rst->dev->parent, &msg);
+	ret = devm_scmi_process_msg(rst->dev, &msg);
 	if (ret)
 		return ret;
 
@@ -55,21 +58,15 @@ static int scmi_reset_request(struct reset_ctl *rst)
 	 * We don't really care about the attribute, just check
 	 * the reset domain exists.
 	 */
-	ret = devm_scmi_process_msg(rst->dev->parent, &msg);
+	ret = devm_scmi_process_msg(rst->dev, &msg);
 	if (ret)
 		return ret;
 
 	return scmi_to_linux_errno(out.status);
 }
 
-static int scmi_reset_rfree(struct reset_ctl *rst)
-{
-	return 0;
-}
-
 static const struct reset_ops scmi_reset_domain_ops = {
 	.request	= scmi_reset_request,
-	.rfree		= scmi_reset_rfree,
 	.rst_assert	= scmi_reset_assert,
 	.rst_deassert	= scmi_reset_deassert,
 };

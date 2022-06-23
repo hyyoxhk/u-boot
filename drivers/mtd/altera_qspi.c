@@ -11,6 +11,7 @@
 #include <flash.h>
 #include <log.h>
 #include <mtd.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <linux/bitops.h>
 
@@ -152,7 +153,6 @@ static int altera_qspi_erase(struct mtd_info *mtd, struct erase_info *instr)
 				putc('\n');
 			instr->fail_addr = MTD_FAIL_ADDR_UNKNOWN;
 			instr->state = MTD_ERASE_FAILED;
-			mtd_erase_callback(instr);
 			return -EIO;
 		}
 		flash = pdata->base + addr;
@@ -176,7 +176,6 @@ static int altera_qspi_erase(struct mtd_info *mtd, struct erase_info *instr)
 				writel(stat, &regs->isr); /* clear isr */
 				instr->fail_addr = addr;
 				instr->state = MTD_ERASE_FAILED;
-				mtd_erase_callback(instr);
 				return -EIO;
 			}
 			if (flash_verbose)
@@ -188,7 +187,6 @@ static int altera_qspi_erase(struct mtd_info *mtd, struct erase_info *instr)
 		addr += mtd->erasesize;
 	}
 	instr->state = MTD_ERASE_DONE;
-	mtd_erase_callback(instr);
 
 	return 0;
 }

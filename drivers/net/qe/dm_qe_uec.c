@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <memalign.h>
 #include <miiphy.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 
 #include "dm_qe_uec.h"
@@ -171,8 +172,8 @@ static int uec_set_mac_if_mode(struct uec_priv *uec)
 			break;
 		default:
 			return -EINVAL;
-	}
-	break;
+		}
+		break;
 	case SPEED_1000:
 		maccfg2 |= MACCFG2_INTERFACE_MODE_BYTE;
 		switch (enet_if_mode) {
@@ -937,7 +938,7 @@ enum qe_clock qe_clock_source(const char *source)
 		return QE_CLK_NONE;
 
 	if (strncasecmp(source, "brg", 3) == 0) {
-		i = simple_strtoul(source + 3, NULL, 10);
+		i = dectoul(source + 3, NULL);
 		if (i >= 1 && i <= 16)
 			return (QE_BRG1 - 1) + i;
 		else
@@ -945,7 +946,7 @@ enum qe_clock qe_clock_source(const char *source)
 	}
 
 	if (strncasecmp(source, "clk", 3) == 0) {
-		i = simple_strtoul(source + 3, NULL, 10);
+		i = dectoul(source + 3, NULL);
 		if (i >= 1 && i <= 24)
 			return (QE_CLK1 - 1) + i;
 		else
@@ -1132,19 +1133,12 @@ static int qe_uec_remove(struct udevice *dev)
 static int qe_uec_of_to_plat(struct udevice *dev)
 {
 	struct eth_pdata *pdata = dev_get_plat(dev);
-	const char *phy_mode;
 
 	pdata->iobase = (phys_addr_t)devfdt_get_addr(dev);
 
-	pdata->phy_interface = -1;
-	phy_mode = fdt_getprop(gd->fdt_blob, dev_of_offset(dev),
-			       "phy-connection-type", NULL);
-	if (phy_mode)
-		pdata->phy_interface = phy_get_interface_by_name(phy_mode);
-	if (pdata->phy_interface == -1) {
-		debug("%s: Invalid PHY interface '%s'\n", __func__, phy_mode);
+	pdata->phy_interface = dev_read_phy_mode(dev);
+	if (pdata->phy_interface == PHY_INTERFACE_MODE_NA)
 		return -EINVAL;
-	}
 
 	return 0;
 }

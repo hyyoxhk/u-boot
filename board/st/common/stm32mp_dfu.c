@@ -57,7 +57,7 @@ static void board_get_alt_info_mmc(struct udevice *dev, char *buf)
 		first = false;
 	}
 
-	for (p = 1; p < MAX_SEARCH_PARTITIONS; p++) {
+	for (p = 1; p <= MAX_SEARCH_PARTITIONS; p++) {
 		if (part_get_info(desc, p, &info))
 			continue;
 		if (!first)
@@ -132,6 +132,10 @@ void set_dfu_alt_info(char *interface, char *devstr)
 			mtd = get_mtd_device_nm("nor0");
 			if (!IS_ERR_OR_NULL(mtd))
 				board_get_alt_info_mtd(mtd, buf);
+
+			mtd = get_mtd_device_nm("nor1");
+			if (!IS_ERR_OR_NULL(mtd))
+				board_get_alt_info_mtd(mtd, buf);
 		}
 
 		mtd = get_mtd_device_nm("nand0");
@@ -143,7 +147,8 @@ void set_dfu_alt_info(char *interface, char *devstr)
 			board_get_alt_info_mtd(mtd, buf);
 	}
 
-	if (IS_ENABLED(CONFIG_DFU_VIRT)) {
+	if (IS_ENABLED(CONFIG_DFU_VIRT) &&
+	    IS_ENABLED(CMD_STM32PROG_USB)) {
 		strncat(buf, "&virt 0=OTP", DFU_ALT_BUF_LEN);
 
 		if (IS_ENABLED(CONFIG_PMIC_STPMIC1))
@@ -217,7 +222,7 @@ int dfu_read_medium_virt(struct dfu_entity *dfu, u64 offset,
 		return dfu_pmic_read(offset, buf, len);
 	}
 
-	if (CONFIG_IS_ENABLED(CMD_STM32PROG) &&
+	if (IS_ENABLED(CONFIG_CMD_STM32PROG_USB) &&
 	    dfu->data.virt.dev_num >= STM32PROG_VIRT_FIRST_DEV_NUM)
 		return stm32prog_read_medium_virt(dfu, offset, buf, len);
 
@@ -228,7 +233,7 @@ int dfu_read_medium_virt(struct dfu_entity *dfu, u64 offset,
 int dfu_write_medium_virt(struct dfu_entity *dfu, u64 offset,
 			  void *buf, long *len)
 {
-	if (CONFIG_IS_ENABLED(CMD_STM32PROG) &&
+	if (IS_ENABLED(CONFIG_CMD_STM32PROG_USB) &&
 	    dfu->data.virt.dev_num >= STM32PROG_VIRT_FIRST_DEV_NUM)
 		return stm32prog_write_medium_virt(dfu, offset, buf, len);
 
@@ -237,7 +242,7 @@ int dfu_write_medium_virt(struct dfu_entity *dfu, u64 offset,
 
 int __weak dfu_get_medium_size_virt(struct dfu_entity *dfu, u64 *size)
 {
-	if (CONFIG_IS_ENABLED(CMD_STM32PROG) &&
+	if (IS_ENABLED(CONFIG_CMD_STM32PROG_USB) &&
 	    dfu->data.virt.dev_num >= STM32PROG_VIRT_FIRST_DEV_NUM)
 		return stm32prog_get_medium_size_virt(dfu, size);
 

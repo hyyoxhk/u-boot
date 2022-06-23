@@ -8,6 +8,7 @@
 #include <dm.h>
 #include <env.h>
 #include <init.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -118,7 +119,22 @@ int board_late_init(void)
 		if (icicle_mac_addr[idx] == ':')
 			icicle_mac_addr[idx] = ' ';
 	}
-	env_set("icicle_mac_addr", icicle_mac_addr);
+	env_set("icicle_mac_addr0", icicle_mac_addr);
+
+	mac_addr[5] = device_serial_number[0] + 1;
+
+	icicle_mac_addr[0] = '[';
+
+	sprintf(&icicle_mac_addr[1], "%pM", mac_addr);
+
+	icicle_mac_addr[18] = ']';
+	icicle_mac_addr[19] = '\0';
+
+	for (idx = 0; idx < 20; idx++) {
+		if (icicle_mac_addr[idx] == ':')
+			icicle_mac_addr[idx] = ' ';
+	}
+	env_set("icicle_mac_addr1", icicle_mac_addr);
 
 	return 0;
 }

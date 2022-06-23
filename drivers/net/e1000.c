@@ -45,14 +45,6 @@ tested on both gig copper and gig fiber boards
 
 #define TOUT_LOOP   100000
 
-#ifdef CONFIG_DM_ETH
-#define virt_to_bus(devno, v)	dm_pci_virt_to_mem(devno, (void *) (v))
-#define bus_to_phys(devno, a)	dm_pci_mem_to_phys(devno, a)
-#else
-#define virt_to_bus(devno, v)	pci_virt_to_mem(devno, (void *) (v))
-#define bus_to_phys(devno, a)	pci_mem_to_phys(devno, a)
-#endif
-
 #define E1000_DEFAULT_PCI_PBA	0x00000030
 #define E1000_DEFAULT_PCIE_PBA	0x000a0026
 
@@ -5149,7 +5141,7 @@ fill_rx(struct e1000_hw *hw)
 	rd = rx_base + rx_tail;
 	rx_tail = (rx_tail + 1) % 8;
 	memset(rd, 0, 16);
-	rd->buffer_addr = cpu_to_le64((unsigned long)packet);
+	rd->buffer_addr = cpu_to_le64(virt_to_phys(packet));
 
 	/*
 	 * Make sure there are no stale data in WB over this area, which
@@ -5180,8 +5172,8 @@ e1000_configure_tx(struct e1000_hw *hw)
 	unsigned long tipg, tarc;
 	uint32_t ipgr1, ipgr2;
 
-	E1000_WRITE_REG(hw, TDBAL, lower_32_bits((unsigned long)tx_base));
-	E1000_WRITE_REG(hw, TDBAH, upper_32_bits((unsigned long)tx_base));
+	E1000_WRITE_REG(hw, TDBAL, lower_32_bits(virt_to_phys(tx_base)));
+	E1000_WRITE_REG(hw, TDBAH, upper_32_bits(virt_to_phys(tx_base)));
 
 	E1000_WRITE_REG(hw, TDLEN, 128);
 
@@ -5259,11 +5251,7 @@ e1000_configure_tx(struct e1000_hw *hw)
 		mdelay(20);
 	}
 
-
-
 	E1000_WRITE_REG(hw, TCTL, tctl);
-
-
 }
 
 /**
@@ -5325,8 +5313,8 @@ e1000_configure_rx(struct e1000_hw *hw)
 		E1000_WRITE_FLUSH(hw);
 	}
 	/* Setup the Base and Length of the Rx Descriptor Ring */
-	E1000_WRITE_REG(hw, RDBAL, lower_32_bits((unsigned long)rx_base));
-	E1000_WRITE_REG(hw, RDBAH, upper_32_bits((unsigned long)rx_base));
+	E1000_WRITE_REG(hw, RDBAL, lower_32_bits(virt_to_phys(rx_base)));
+	E1000_WRITE_REG(hw, RDBAH, upper_32_bits(virt_to_phys(rx_base)));
 
 	E1000_WRITE_REG(hw, RDLEN, 128);
 
@@ -5387,7 +5375,7 @@ static int _e1000_transmit(struct e1000_hw *hw, void *txpacket, int length)
 	txp = tx_base + tx_tail;
 	tx_tail = (tx_tail + 1) % 8;
 
-	txp->buffer_addr = cpu_to_le64(virt_to_bus(hw->pdev, nv_packet));
+	txp->buffer_addr = cpu_to_le64(virt_to_phys(nv_packet));
 	txp->lower.data = cpu_to_le32(hw->txd_cmd | length);
 	txp->upper.data = 0;
 
@@ -5561,8 +5549,8 @@ static int e1000_init_one(struct e1000_hw *hw, int cardnum, pci_dev_t devno,
 	hw->eeprom_semaphore_present = true;
 #endif
 #ifdef CONFIG_DM_ETH
-	hw->hw_addr = dm_pci_map_bar(devno,	PCI_BASE_ADDRESS_0,
-						PCI_REGION_MEM);
+	hw->hw_addr = dm_pci_map_bar(devno,	PCI_BASE_ADDRESS_0, 0, 0,
+						PCI_REGION_TYPE, PCI_REGION_MEM);
 #else
 	hw->hw_addr = pci_map_bar(devno,	PCI_BASE_ADDRESS_0,
 						PCI_REGION_MEM);
@@ -5680,6 +5668,10 @@ static int e1000_write_hwaddr(struct eth_device *dev)
 	int ret_val, i;
 
 	DEBUGOUT("%s: mac=%pM\n", __func__, mac);
+
+	if ((hw->eeprom.type == e1000_eeprom_invm) &&
+	    !(E1000_READ_REG(hw, EECD) & E1000_EECD_FLASH_DETECTED_I210))
+		return -ENOSYS;
 
 	memset(current_mac, 0, 6);
 
@@ -5800,7 +5792,7 @@ static int do_e1000(struct cmd_tbl *cmdtp, int flag, int argc,
 	}
 
 	/* Make sure we can find the requested e1000 card */
-	cardnum = simple_strtoul(argv[1], NULL, 10);
+	cardnum = dectoul(argv[1], NULL);
 #ifdef CONFIG_DM_ETH
 	e1000_name(name, cardnum);
 	ret = uclass_get_device_by_name(UCLASS_ETH, name, &dev);

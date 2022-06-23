@@ -1,5 +1,9 @@
 if ARCH_EXYNOS
 
+config BOARD_COMMON
+	def_bool y
+	depends on !TARGET_SMDKV310 && !TARGET_ARNDALE
+
 choice
 	prompt "EXYNOS architecture type select"
 	optional
@@ -23,6 +27,7 @@ config ARCH_EXYNOS5
 	imply CMD_HASH
 	imply CRC32_VERIFY
 	imply HASH_VERIFY
+	imply KEYBOARD
 	imply USB_ETHER_ASIX
 	imply USB_ETHER_RTL8152
 	imply USB_ETHER_SMSC95XX
@@ -81,7 +86,7 @@ endif
 
 if ARCH_EXYNOS5
 
-config SPL_GPIO_SUPPORT
+config SPL_GPIO
 	default y
 
 config SPL_LIBCOMMON_SUPPORT
@@ -144,7 +149,7 @@ if ARCH_EXYNOS7
 choice
 	prompt "EXYNOS7 board select"
 
-config  TARGET_ESPRESSO7420
+config TARGET_ESPRESSO7420
 	bool "ESPRESSO7420 board"
 	select ARM64
 	select ARMV8_MULTIENTRY
@@ -152,6 +157,33 @@ config  TARGET_ESPRESSO7420
 	select OF_CONTROL
 	select PINCTRL
 	select PINCTRL_EXYNOS7420
+	select SUPPORT_SPL
+
+config  TARGET_A5Y17LTE
+	bool "Samsung SM-A520F board"
+	select ARM64
+	select CLK_EXYNOS
+	select OF_CONTROL
+	select PINCTRL
+	select PINCTRL_EXYNOS78x0
+	select SUPPORT_SPL
+
+config  TARGET_A7Y17LTE
+	bool "Samsung SM-A720F board"
+	select ARM64
+	select CLK_EXYNOS
+	select OF_CONTROL
+	select PINCTRL
+	select PINCTRL_EXYNOS78x0
+	select SUPPORT_SPL
+
+config  TARGET_A3Y17LTE
+	bool "Samsung SM-A320F board"
+	select ARM64
+	select CLK_EXYNOS
+	select OF_CONTROL
+	select PINCTRL
+	select PINCTRL_EXYNOS78x0
 	select SUPPORT_SPL
 
 endchoice
@@ -171,6 +203,7 @@ source "board/samsung/arndale/Kconfig"
 source "board/samsung/smdk5250/Kconfig"
 source "board/samsung/smdk5420/Kconfig"
 source "board/samsung/espresso7420/Kconfig"
+source "board/samsung/axy17lte/Kconfig"
 
 config SPL_LDSCRIPT
 	default "board/samsung/common/exynos-uboot-spl.lds" if ARCH_EXYNOS5 || ARCH_EXYNOS4

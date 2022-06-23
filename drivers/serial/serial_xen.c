@@ -8,6 +8,7 @@
 #include <dm.h>
 #include <serial.h>
 #include <watchdog.h>
+#include <asm/global_data.h>
 
 #include <linux/bug.h>
 
@@ -179,4 +180,3 @@ U_BOOT_DRIVER(serial_xen) = {
 	.flags			= DM_FLAG_PRE_RELOC,
 #endif
 };
-

@@ -8,14 +8,12 @@
 asflags-y += -DHOST_ARCH="$(HOST_ARCH)"
 ccflags-y += -DHOST_ARCH="$(HOST_ARCH)"
 
-CFLAGS_dtbdump_exit.o := $(CFLAGS_EFI) -Os -ffreestanding
-CFLAGS_REMOVE_dtbdump.o := $(CFLAGS_NON_EFI)
+CFLAGS_efi_selftest_miniapp_exception.o := $(CFLAGS_EFI) -Os -ffreestanding
+CFLAGS_REMOVE_efi_selftest_miniapp_exception.o := $(CFLAGS_NON_EFI)
 CFLAGS_efi_selftest_miniapp_exit.o := $(CFLAGS_EFI) -Os -ffreestanding
 CFLAGS_REMOVE_efi_selftest_miniapp_exit.o := $(CFLAGS_NON_EFI)
 CFLAGS_efi_selftest_miniapp_return.o := $(CFLAGS_EFI) -Os -ffreestanding
 CFLAGS_REMOVE_efi_selftest_miniapp_return.o := $(CFLAGS_NON_EFI)
-CFLAGS_initrddump_exit.o := $(CFLAGS_EFI) -Os -ffreestanding
-CFLAGS_REMOVE_initrddump.o := $(CFLAGS_NON_EFI)
 
 obj-y += \
 efi_selftest.o \
@@ -57,11 +55,12 @@ obj-$(CONFIG_EFI_DEVICE_PATH_TO_TEXT) += efi_selftest_devicepath.o
 obj-$(CONFIG_EFI_UNICODE_COLLATION_PROTOCOL2) += \
 efi_selftest_unicode_collation.o
 
-obj-$(CONFIG_CPU_V7) += efi_selftest_unaligned.o
+ifeq ($(CONFIG_CPU_V7A)$(CONFIG_CPU_V7M)$(CONFIG_CPU_V7R),y)
+obj-y += efi_selftest_unaligned.o
+endif
 obj-$(CONFIG_EFI_LOADER_HII) += efi_selftest_hii.o
 obj-$(CONFIG_EFI_RNG_PROTOCOL) += efi_selftest_rng.o
 obj-$(CONFIG_EFI_GET_TIME) += efi_selftest_rtc.o
-obj-$(CONFIG_EFI_LOAD_FILE2_INITRD) += efi_selftest_load_initrd.o
 obj-$(CONFIG_EFI_TCG2_PROTOCOL) += efi_selftest_tcg2.o
 
 ifeq ($(CONFIG_GENERATE_ACPI_TABLE),)
@@ -72,6 +71,8 @@ ifeq ($(CONFIG_BLK)$(CONFIG_DOS_PARTITION),yy)
 obj-y += efi_selftest_block_device.o
 endif
 
+obj-$(CONFIG_EFI_ESRT) += efi_selftest_esrt.o
+
 targets += \
 efi_miniapp_file_image_exception.h \
 efi_miniapp_file_image_exit.h \
@@ -79,14 +80,6 @@ efi_miniapp_file_image_return.h \
 efi_selftest_miniapp_exception.efi \
 efi_selftest_miniapp_exit.efi \
 efi_selftest_miniapp_return.efi
-
-ifeq ($(CONFIG_GENERATE_ACPI_TABLE),)
-always += dtbdump.efi
-endif
-
-ifdef CONFIG_EFI_LOAD_FILE2_INITRD
-always += initrddump.efi
-endif
 
 $(obj)/efi_miniapp_file_image_exception.h: $(obj)/efi_selftest_miniapp_exception.efi
 	$(obj)/../../tools/file2include $(obj)/efi_selftest_miniapp_exception.efi > \

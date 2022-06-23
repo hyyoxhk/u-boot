@@ -10,8 +10,6 @@
 
 /* Onboard devices */
 
-#define CONFIG_SYS_MALLOC_LEN		0x1F0000
-#define CONFIG_SYS_LOAD_ADDR		0x00100000
 #define CONFIG_SYS_INIT_SP_OFFSET       0x400000
 
 #if defined(CONFIG_SOC_LUTON) || defined(CONFIG_SOC_SERVAL)
@@ -33,8 +31,6 @@
 #else
 #error Unknown DDR size - please add!
 #endif
-
-#define CONFIG_SYS_MONITOR_BASE         CONFIG_SYS_TEXT_BASE
 
 #if defined(CONFIG_MTDIDS_DEFAULT) && defined(CONFIG_MTDPARTS_DEFAULT)
 #define VCOREIII_DEFAULT_MTD_ENV		    \

@@ -49,7 +49,7 @@ static int clk_ti_ctrl_disable(struct clk *clk)
 	}
 
 	clk_modules[0] = (u32 *)(offs);
-	dev_dbg(clk->dev, "module address=%p\n", clk_modules[0]);
+	dev_dbg(clk->dev, "disable module @ %p\n", clk_modules[0]);
 	do_disable_clocks(NULL, clk_modules, 1);
 	return 0;
 }
@@ -69,7 +69,7 @@ static int clk_ti_ctrl_enable(struct clk *clk)
 	}
 
 	clk_modules[0] = (u32 *)(offs);
-	dev_dbg(clk->dev, "module address=%p\n", clk_modules[0]);
+	dev_dbg(clk->dev, "enable module @ %p\n", clk_modules[0]);
 	do_enable_clocks(NULL, clk_modules, 1);
 	return 0;
 }
@@ -83,7 +83,7 @@ static int clk_ti_ctrl_of_xlate(struct clk *clk,
 				struct ofnode_phandle_args *args)
 {
 	if (args->args_count != 2) {
-		dev_err(clk->dev, "invaild args_count: %d\n", args->args_count);
+		dev_err(clk->dev, "invalid args_count: %d\n", args->args_count);
 		return -EINVAL;
 	}
 

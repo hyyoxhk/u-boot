@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
  * Copyright 2015 Freescale Semiconductor, Inc.
+ * Copyright 2021 NXP
  */
 
 #include <common.h>
 #include <i2c.h>
 #include <init.h>
+#include <asm/global_data.h>
 #include <asm/io.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/fsl_serdes.h>
@@ -19,7 +21,6 @@
 #include <fm_eth.h>
 #include <fsl_esdhc.h>
 #include <fsl_ifc.h>
-#include <fsl_sec.h>
 #include "cpld.h"
 #ifdef CONFIG_U_QE
 #include <fsl_qe.h>
@@ -210,12 +211,12 @@ int board_init(void)
 	out_le32(SMMU_NSCR0, val);
 #endif
 
-#ifdef CONFIG_FSL_CAAM
-	sec_init();
-#endif
-
 #ifdef CONFIG_FSL_LS_PPA
 	ppa_init();
+#endif
+
+#if !defined(CONFIG_SYS_EARLY_PCI_INIT) && defined(CONFIG_DM_ETH)
+	pci_init();
 #endif
 
 #ifdef CONFIG_U_QE

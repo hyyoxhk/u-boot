@@ -10,12 +10,19 @@
 #include <log.h>
 #include <malloc.h>
 #include <mapmem.h>
+#include <mmc.h>
 #include <sdhci.h>
 #include <acpi/acpigen.h>
 #include <acpi/acpi_device.h>
 #include <acpi/acpi_dp.h>
 #include <asm-generic/gpio.h>
 #include <dm/acpi.h>
+
+/* Type of MMC device */
+enum {
+	TYPE_SD,
+	TYPE_EMMC,
+};
 
 struct pci_mmc_plat {
 	struct mmc_config cfg;
@@ -34,11 +41,19 @@ static int pci_mmc_probe(struct udevice *dev)
 	struct pci_mmc_plat *plat = dev_get_plat(dev);
 	struct pci_mmc_priv *priv = dev_get_priv(dev);
 	struct sdhci_host *host = &priv->host;
+	struct blk_desc *desc;
 	int ret;
 
-	host->ioaddr = (void *)dm_pci_map_bar(dev, PCI_BASE_ADDRESS_0,
+	ret = mmc_of_parse(dev, &plat->cfg);
+	if (ret)
+		return ret;
+	desc = mmc_get_blk_desc(&plat->mmc);
+	desc->removable = !(plat->cfg.host_caps & MMC_CAP_NONREMOVABLE);
+
+	host->ioaddr = (void *)dm_pci_map_bar(dev, PCI_BASE_ADDRESS_0, 0, 0, PCI_REGION_TYPE,
 					      PCI_REGION_MEM);
 	host->name = dev->name;
+	host->cd_gpio = priv->cd_gpio;
 	host->mmc = &plat->mmc;
 	host->mmc->dev = dev;
 	ret = sdhci_setup_cfg(&plat->cfg, host, 0, 0);
@@ -54,8 +69,11 @@ static int pci_mmc_of_to_plat(struct udevice *dev)
 {
 	if (CONFIG_IS_ENABLED(DM_GPIO)) {
 		struct pci_mmc_priv *priv = dev_get_priv(dev);
+		int ret;
 
-		gpio_request_by_name(dev, "cd-gpios", 0, &priv->cd_gpio, GPIOD_IS_IN);
+		ret = gpio_request_by_name(dev, "cd-gpios", 0, &priv->cd_gpio,
+					   GPIOD_IS_IN);
+		log_debug("cd-gpio %s done, ret=%d\n", dev->name, ret);
 	}
 
 	return 0;
@@ -78,6 +96,8 @@ static int pci_mmc_acpi_fill_ssdt(const struct udevice *dev,
 	int ret;
 
 	if (!dev_has_ofnode(dev))
+		return 0;
+	if (dev_get_driver_data(dev) == TYPE_EMMC)
 		return 0;
 
 	ret = gpio_get_acpi(&priv->cd_gpio, &gpio);
@@ -122,7 +142,8 @@ struct acpi_ops pci_mmc_acpi_ops = {
 };
 
 static const struct udevice_id pci_mmc_match[] = {
-	{ .compatible = "intel,apl-sd" },
+	{ .compatible = "intel,apl-sd", .data = TYPE_SD },
+	{ .compatible = "intel,apl-emmc", .data = TYPE_EMMC },
 	{ }
 };
 

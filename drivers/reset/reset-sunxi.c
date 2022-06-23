@@ -11,11 +11,11 @@
 #include <malloc.h>
 #include <reset-uclass.h>
 #include <asm/io.h>
+#include <clk/sunxi.h>
 #include <dm/device-internal.h>
 #include <dm/lists.h>
 #include <linux/bitops.h>
 #include <linux/log2.h>
-#include <asm/arch/ccu.h>
 
 struct sunxi_reset_priv {
 	void *base;
@@ -37,13 +37,6 @@ static int sunxi_reset_request(struct reset_ctl *reset_ctl)
 
 	if (reset_ctl->id >= priv->count)
 		return -EINVAL;
-
-	return 0;
-}
-
-static int sunxi_reset_free(struct reset_ctl *reset_ctl)
-{
-	debug("%s: (RST#%ld)\n", __func__, reset_ctl->id);
 
 	return 0;
 }
@@ -85,7 +78,6 @@ static int sunxi_reset_deassert(struct reset_ctl *reset_ctl)
 
 struct reset_ops sunxi_reset_ops = {
 	.request = sunxi_reset_request,
-	.rfree = sunxi_reset_free,
 	.rst_assert = sunxi_reset_assert,
 	.rst_deassert = sunxi_reset_deassert,
 };
