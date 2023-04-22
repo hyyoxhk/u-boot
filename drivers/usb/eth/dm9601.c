@@ -254,7 +254,7 @@ static void dm9601_set_multicast(struct usb_device *udev)
 
 static int dm9601_bind(struct udevice *dev)
 {
-	struct eth_pdata *pdata = dev_get_platdata(dev);
+	struct eth_pdata *pdata = dev_get_plat(dev);
 	struct dm9601_private *priv = dev_get_priv(dev);
 	struct ueth_data *ueth = &priv->ueth;
 	int ret = 0;
@@ -450,7 +450,7 @@ static void dm9601_eth_stop(struct udevice *dev)
 
 static int dm9601_write_hwaddr(struct udevice *dev)
 {
-	struct eth_pdata *pdata = dev_get_platdata(dev);
+	struct eth_pdata *pdata = dev_get_plat(dev);
 	struct dm9601_private *priv = dev_get_priv(dev);
 	struct ueth_data *ueth = &priv->ueth;
 
@@ -493,8 +493,8 @@ U_BOOT_DRIVER(dm9601_eth) = {
 	.id = UCLASS_ETH,
 	.probe = dm9601_eth_probe,
 	.ops = &dm9601_eth_ops,
-	.priv_auto_alloc_size = sizeof(struct dm9601_private),
-	.platdata_auto_alloc_size = sizeof(struct eth_pdata),
+	.priv_auto = sizeof(struct dm9601_private),
+	.plat_auto = sizeof(struct eth_pdata),
 };
 
 static const struct usb_device_id dm9601_eth_id_table[] = {
