@@ -319,7 +319,7 @@ enum env_location env_get_location(enum env_operation op, int prio)
 	}
 }
 
-const char *env_ext4_get_intf(void)
+const char *env_fat_get_intf(void)
 {
 	u32 bootmode = get_boot_mode();
 
