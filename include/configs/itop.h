@@ -25,9 +25,6 @@
 #define CONFIG_SYS_MEM_TOP_HIDE		BIT(20)
 #define CONFIG_TZSW_RESERVED_DRAM_SIZE	CONFIG_SYS_MEM_TOP_HIDE
 
-/* memtest works on */
-#define CONFIG_SYS_LOAD_ADDR		(CONFIG_SYS_SDRAM_BASE + 0x3E00000)
-
 #include <linux/sizes.h>
 
 /*
