@@ -18,9 +18,9 @@
 
 #define CONFIG_MACH_TYPE	5115
 
-#define CONFIG_SYS_SDRAM_BASE	0x40000000
+#define CFG_SYS_SDRAM_BASE	0x40000000
 #define SDRAM_BANK_SIZE		(256 << 20)	/* 256 MB */
-#define PHYS_SDRAM_1		CONFIG_SYS_SDRAM_BASE
+#define PHYS_SDRAM_1		CFG_SYS_SDRAM_BASE
 
 #include <linux/sizes.h>
 
