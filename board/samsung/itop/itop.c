@@ -286,9 +286,9 @@ int exynos_power_init(void)
 	return 0;
 }
 
-const char *env_ext4_get_dev_part(void)
+char *env_fat_get_dev_part(void)
 {
-	static char *const dev_part[] = {"0:auto", "1:auto"};
+	static char *dev_part[] = {"0:auto", "1:auto"};
 	u32 bootmode = get_boot_mode();
 
 	if (bootmode == BOOT_MODE_SD) {
@@ -310,8 +310,8 @@ enum env_location env_get_location(enum env_operation op, int prio)
 	case BOOT_MODE_EMMC_SD:
 		if (CONFIG_IS_ENABLED(ENV_IS_IN_MMC))
 			return ENVL_MMC;
-		else if (CONFIG_IS_ENABLED(ENV_IS_IN_EXT4))
-			return ENVL_EXT4;
+		else if (CONFIG_IS_ENABLED(ENV_IS_IN_FAT))
+			return ENVL_FAT;
 		else
 			return ENVL_NOWHERE;
 	default:
