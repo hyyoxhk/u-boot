@@ -154,9 +154,9 @@
 	"consoleon=set console console=ttySAC1,115200n8; save; reset\0" \
 	"consoleoff=set console console=ram; save; reset\0" \
 	"initrdname=uInitrd\0" \
-	"ramdisk_addr_r=0x42000000\0" \
-	"scriptaddr=0x42000000\0" \
-	"fdt_addr_r=0x41900000\0" \
+	"ramdisk_addr_r=0x44200000\0" \
+	"scriptaddr=0x43f00000\0" \
+	"fdt_addr_r=0x43e00000\0" \
 	"kernel_addr_r=0x41e00000\0" \
 	BOOTENV
 
