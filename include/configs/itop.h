@@ -151,9 +151,4 @@
 	"kernel_addr_r=0x41e00000\0" \
 	BOOTENV
 
-/* GPT */
-
-/* Security subsystem - enable hw_rand() */
-#define CONFIG_EXYNOS_ACE_SHA
-
 #endif	/* __CONFIG_H */
