@@ -32,9 +32,6 @@
 
 #define CONFIG_BOOTCOMMAND		"run distro_bootcmd ; run autoboot"
 
-#define CONFIG_SYS_INIT_SP_ADDR	(CONFIG_SYS_LOAD_ADDR \
-					- GENERATED_GBL_DATA_SIZE)
-
 #define CONFIG_SYS_MONITOR_BASE	0x00000000
 
 /* Partitions name */
