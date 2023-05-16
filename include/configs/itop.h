@@ -156,6 +156,4 @@
 /* Security subsystem - enable hw_rand() */
 #define CONFIG_EXYNOS_ACE_SHA
 
-#define CONFIG_EXYNOS_FB
-
 #endif	/* __CONFIG_H */
