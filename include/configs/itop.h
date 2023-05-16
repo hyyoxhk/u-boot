@@ -30,9 +30,6 @@
  */
 #define CONFIG_SYS_BOOTMAPSZ		SZ_512M
 
-/* Extend size of kernel image for uncompression */
-#define CONFIG_SYS_BOOTM_LEN		SZ_32M
-
 #define CONFIG_BOOTCOMMAND		"run distro_bootcmd ; run autoboot"
 
 #define CONFIG_SYS_INIT_SP_ADDR	(CONFIG_SYS_LOAD_ADDR \
