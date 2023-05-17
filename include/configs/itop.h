@@ -144,10 +144,12 @@
 	"consoleon=set console console=ttySAC1,115200n8; save; reset\0" \
 	"consoleoff=set console console=ram; save; reset\0" \
 	"initrdname=uInitrd\0" \
-	"ramdisk_addr_r=0x44200000\0" \
-	"scriptaddr=0x43f00000\0" \
-	"fdt_addr_r=0x43e00000\0" \
-	"kernel_addr_r=0x41e00000\0" \
+	"ramdisk_addr_r=0x44400000\0" \
+	"fdtoverlay_addr_r=0x44300000\0" \
+	"pxefile_addr_r=0x44200000\0" \
+	"scriptaddr=0x44100000\0" \
+	"fdt_addr_r=0x44000000\0" \
+	"kernel_addr_r=0x42000000\0" \
 	BOOTENV
 
 #endif	/* __CONFIG_H */
