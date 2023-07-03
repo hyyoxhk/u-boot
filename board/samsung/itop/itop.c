@@ -119,6 +119,7 @@ static void setup_boot_mode(void)
 		env_set("boot_instance", "0");
 		env_set("mmcroot", "/dev/ram0");
 		env_set("LABEL", "install");
+		break;
 	case BOOT_MODE_EMMC_SD:
 		env_set("boot_device", "mmc");
 		env_set("boot_instance", "1");
