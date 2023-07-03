@@ -392,8 +392,7 @@
 &sdhci2 {
 	samsung,bus-width = <4>;
 	samsung,timing = <1 2 3>;
-	cd-gpios = <&gpx0 7 GPIO_ACTIVE_HIGH>;
-	cd-inverted;
+	cd-gpios = <&gpx0 7 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 
