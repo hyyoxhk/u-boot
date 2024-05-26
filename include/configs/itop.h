@@ -31,8 +31,6 @@
 
 #define CONFIG_BOOTCOMMAND		"run distro_bootcmd ; run autoboot"
 
-#define CONFIG_SYS_MONITOR_BASE	0x00000000
-
 /* Partitions name */
 #define PARTS_BOOT		"boot"
 #define PARTS_ROOT		"platform"
