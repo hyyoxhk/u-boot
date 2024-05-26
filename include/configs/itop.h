@@ -33,7 +33,44 @@
 	func(MMC, mmc, 0) \
 	func(MMC, mmc, 1)
 
+#define ITOP_EXTRA \
+	"env_check=if env info -p -d -q; then env save; fi\0"
+
+#define ITOP_BOARD_EXTRA_ENV \
+	"console=ttySAC1\0" \
+
+#define ITOP_BOOTCMD "bootcmd_itop=" \
+	"echo \"Boot over ${boot_device}${boot_instance}!\"; " \
+	"run env_check; " \
+	"if test ${boot_device} = mmc; then; " \
+		"env set boot_targets \"mmc${boot_instance}\"; " \
+	"fi;" \
+	"if test ${boot_targets} = mmc0; then; " \
+		"env set ramroot /dev/ram0; " \
+		"env set bootroot ${ramroot}; " \
+	"fi;" \
+	"if test ${boot_targets} = mmc1; then; " \
+		"env set mmcroot /dev/mmcblk${boot_instance}p${boot_part}; " \
+		"env set bootroot ${mmcroot}; " \
+	"fi;" \
+	"run distro_bootcmd;\0" \
+
 #include <config_distro_bootcmd.h>
+
+#define __KERNEL_ADDR_R     __stringify(0x42000000)
+#define __FDT_ADDR_R        __stringify(0x44000000)
+#define __SCRIPT_ADDR_R     __stringify(0x44100000)
+#define __PXEFILE_ADDR_R    __stringify(0x44200000)
+#define __FDTOVERLAY_ADDR_R __stringify(0x44300000)
+#define __RAMDISK_ADDR_R    __stringify(0x44400000)
+
+#define ITOP_MEM_LAYOUT \
+	"kernel_addr_r=" __KERNEL_ADDR_R "\0" \
+	"fdt_addr_r=" __FDT_ADDR_R "\0" \
+	"scriptaddr=" __SCRIPT_ADDR_R "\0" \
+	"pxefile_addr_r=" __PXEFILE_ADDR_R "\0" \
+	"fdtoverlay_addr_r=" __FDTOVERLAY_ADDR_R "\0" \
+	"ramdisk_addr_r=" __RAMDISK_ADDR_R "\0"
 
 /*
  * Bootable media layout:
@@ -42,83 +79,12 @@
  * BL2     31   30
  * UBOOT   63   62
  * TZSW  2111 2110
- * ENV   2560 2560(part user)
- *
- * MBR Primary partiions:
- * Num Name   Size  Offset
- * 1.  BOOT:  100MiB 2MiB
- * 2.  ROOT:  -
  */
 #define CFG_EXTRA_ENV_SETTINGS \
-	"loadbootscript=load mmc ${mmcbootdev}:${mmcbootpart} ${scriptaddr} " \
-		"boot.scr\0" \
-	"loadkernel=load mmc ${mmcbootdev}:${mmcbootpart} ${kernel_addr_r} " \
-		"${kernelname}\0" \
-	"loadinitrd=load mmc ${mmcbootdev}:${mmcbootpart} ${ramdisk_addr_r} " \
-		"${initrdname}\0" \
-	"loaddtb=load mmc ${mmcbootdev}:${mmcbootpart} ${fdt_addr_r} " \
-		"${fdtfile}\0" \
-	"check_ramdisk=" \
-		"if run loadinitrd; then " \
-			"setenv initrd_addr ${ramdisk_addr_r};" \
-		"else " \
-			"setenv initrd_addr -;" \
-		"fi;\0" \
-	"check_dtb=" \
-		"if run loaddtb; then " \
-			"setenv fdt_addr ${fdt_addr_r};" \
-		"else " \
-			"setenv fdt_addr;" \
-		"fi;\0" \
-	"kernel_args=" \
-		"setenv bootargs root=/dev/mmcblk${mmcrootdev}p${mmcrootpart}" \
-		" rootwait ${console} ${opts}\0" \
-	"boot_script=" \
-		"run loadbootscript;" \
-		"source ${scriptaddr}\0" \
-	"boot_fit=" \
-		"setenv kernelname Image.itb;" \
-		"run loadkernel;" \
-		"run kernel_args;" \
-		"bootm ${kernel_addr_r}#${board_name}\0" \
-	"boot_uimg=" \
-		"setenv kernelname uImage;" \
-		"run check_dtb;" \
-		"run check_ramdisk;" \
-		"run loadkernel;" \
-		"run kernel_args;" \
-		"bootm ${kernel_addr_r} ${initrd_addr} ${fdt_addr};\0" \
-	"boot_zimg=" \
-		"setenv kernelname zImage;" \
-		"run check_dtb;" \
-		"run check_ramdisk;" \
-		"run loadkernel;" \
-		"run kernel_args;" \
-		"bootz ${kernel_addr_r} ${initrd_addr} ${fdt_addr};\0" \
-	"autoboot=" \
-		"if test -e mmc ${mmcbootdev} boot.scr; then; " \
-			"run boot_script; " \
-		"elif test -e mmc ${mmcbootdev} Image.itb; then; " \
-			"run boot_fit;" \
-		"elif test -e mmc ${mmcbootdev} zImage; then; " \
-			"run boot_zimg;" \
-		"elif test -e mmc ${mmcbootdev} uImage; then; " \
-			"run boot_uimg;" \
-		"fi;\0" \
-	"console=console=ttySAC1,115200n8\0" \
-	"mmcbootdev=0\0" \
-	"mmcbootpart=1\0" \
-	"mmcrootdev=0\0" \
-	"mmcrootpart=2\0" \
-	"consoleon=set console console=ttySAC1,115200n8; save; reset\0" \
-	"consoleoff=set console console=ram; save; reset\0" \
-	"initrdname=uInitrd\0" \
-	"ramdisk_addr_r=0x44400000\0" \
-	"fdtoverlay_addr_r=0x44300000\0" \
-	"pxefile_addr_r=0x44200000\0" \
-	"scriptaddr=0x44100000\0" \
-	"fdt_addr_r=0x44000000\0" \
-	"kernel_addr_r=0x42000000\0" \
-	BOOTENV
+	ITOP_MEM_LAYOUT \
+	ITOP_BOOTCMD \
+	BOOTENV \
+	ITOP_EXTRA \
+	ITOP_BOARD_EXTRA_ENV
 
 #endif	/* __CONFIG_H */

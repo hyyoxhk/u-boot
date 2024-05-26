@@ -112,18 +112,19 @@ static void setup_board_info(void)
 static void setup_boot_mode(void)
 {
 	u32 bootmode = get_boot_mode();
+	char *boot_part = env_get("boot_part");
+	if (!boot_part)
+		env_set("boot_part", "2");
 
 	switch (bootmode) {
 	case BOOT_MODE_SD:
 		env_set("boot_device", "mmc");
 		env_set("boot_instance", "0");
-		env_set("mmcroot", "/dev/ram0");
 		env_set("LABEL", "install");
 		break;
 	case BOOT_MODE_EMMC_SD:
 		env_set("boot_device", "mmc");
 		env_set("boot_instance", "1");
-		env_set("mmcroot", "/dev/mmcblk1p2 rootwait rw");
 		env_set("LABEL", "boot");
 		break;
 	default:
