@@ -29,8 +29,6 @@
  */
 #define CFG_SYS_BOOTMAPSZ		SZ_512M
 
-#define CONFIG_BOOTCOMMAND		"run distro_bootcmd ; run autoboot"
-
 /* Partitions name */
 #define PARTS_BOOT		"boot"
 #define PARTS_ROOT		"platform"
