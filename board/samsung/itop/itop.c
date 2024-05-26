@@ -139,34 +139,6 @@ void set_board_info(void)
 }
 #endif
 
-#ifdef CONFIG_SET_DFU_ALT_INFO
-char *get_dfu_alt_system(char *interface, char *devstr)
-{
-	return env_get("dfu_alt_system");
-}
-
-char *get_dfu_alt_boot(char *interface, char *devstr)
-{
-	struct mmc *mmc;
-	char *alt_boot;
-	int dev_num;
-
-	dev_num = simple_strtoul(devstr, NULL, 10);
-
-	mmc = find_mmc_device(dev_num);
-	if (!mmc)
-		return NULL;
-
-	if (mmc_init(mmc))
-		return NULL;
-
-	alt_boot = IS_SD(mmc) ? CFG_DFU_ALT_BOOT_SD :
-				CFG_DFU_ALT_BOOT_EMMC;
-
-	return alt_boot;
-}
-#endif
-
 static void board_clock_init(void)
 {
 	struct exynos4x12_clock *clk =
