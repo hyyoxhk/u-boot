@@ -37,7 +37,7 @@
 	"env_check=if env info -p -d -q; then env save; fi\0"
 
 #define ITOP_BOARD_EXTRA_ENV \
-	"console=ttySAC1\0" \
+	"console=ttySAC2\0" \
 
 #define ITOP_BOOTCMD "bootcmd_itop=" \
 	"echo \"Boot over ${boot_device}${boot_instance}!\"; " \
