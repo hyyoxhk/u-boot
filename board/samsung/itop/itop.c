@@ -22,6 +22,7 @@
 #include <power/s5m8767.h>
 #include <errno.h>
 #include <mmc.h>
+#include <string.h>
 #include <usb.h>
 #include <usb/dwc2_udc.h>
 #include "setup.h"
@@ -113,7 +114,7 @@ static void setup_boot_mode(void)
 {
 	u32 bootmode = get_boot_mode();
 	char *boot_part = env_get("boot_part");
-	if (!boot_part)
+	if (!boot_part || (strcmp(boot_part, "2") && strcmp(boot_part, "3")))
 		env_set("boot_part", "2");
 
 	switch (bootmode) {
