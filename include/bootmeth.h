@@ -425,4 +425,16 @@ int bootmeth_common_read_file(struct udevice *dev, struct bootflow *bflow,
  */
 int bootmeth_get_bootflow(struct udevice *dev, struct bootflow *bflow);
 
+/**
+ * bootmeth_script_boot() - Execute a script bootflow
+ *
+ * Set the device and partition environment variables and execute the script
+ * stored in the bootflow buffer.
+ *
+ * @dev: Bootmeth device
+ * @bflow: Bootflow containing the script image
+ * Return: 0 on success, or a negative error code
+ */
+int bootmeth_script_boot(struct udevice *dev, struct bootflow *bflow);
+
 #endif

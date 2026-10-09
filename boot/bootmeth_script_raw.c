@@ -1,0 +1,202 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Bootmethod for scripts stored in a raw partition
+ *
+ * Copyright 2026 He Yong <hyyoxhk@163.com>
+ */
+
+#define LOG_CATEGORY UCLASS_BOOTSTD
+
+#include <blk.h>
+#include <bootflow.h>
+#include <bootmeth.h>
+#include <dm.h>
+#include <image.h>
+#include <malloc.h>
+#include <mapmem.h>
+#include <part.h>
+#include <asm/cache.h>
+
+static int script_raw_check(struct udevice *dev, struct bootflow_iter *iter)
+{
+	return bootflow_iter_check_blk(iter);
+}
+
+/**
+ * script_raw_validate() - Check bounds before following image metadata
+ *
+ * @buf: Complete script image
+ * @size: Image size in bytes, excluding block padding
+ * Return: 0 if valid, or a negative error code
+ */
+static int script_raw_validate(void *buf, uint size)
+{
+	struct legacy_img_hdr *hdr = buf;
+	const fdt32_t *lengths;
+	uint pos, len;
+	char *data;
+	int images, node, ret;
+
+	if (genimg_get_format(buf) == IMAGE_FORMAT_LEGACY) {
+		pos = sizeof(*hdr);
+		if (size < pos + 2 * sizeof(*lengths) ||
+		    image_get_data_size(hdr) != size - pos ||
+		    !image_check_hcrc(hdr))
+			return -EINVAL;
+		lengths = buf + pos;
+		len = fdt32_to_cpu(*lengths);
+		do {
+			if (size - pos < sizeof(*lengths))
+				return -EINVAL;
+			pos += sizeof(*lengths);
+		} while (*lengths++);
+		if (!len || len > size - pos)
+			return -EINVAL;
+	} else if (IS_ENABLED(CONFIG_FIT) &&
+		   genimg_get_format(buf) == IMAGE_FORMAT_FIT) {
+		ret = fdt_check_full(buf, size);
+		if (ret || fdt_totalsize(buf) != size)
+			return -EINVAL;
+		images = fdt_path_offset(buf, FIT_IMAGES_PATH);
+		if (images < 0)
+			return -EINVAL;
+		fdt_for_each_subnode(node, buf, images) {
+			/* Do not follow external data offsets during verification. */
+			if (fdt_getprop(buf, node, FIT_DATA_OFFSET_PROP, NULL) ||
+			    fdt_getprop(buf, node, FIT_DATA_POSITION_PROP, NULL))
+				return -EOPNOTSUPP;
+		}
+	} else {
+		return -ENOEXEC;
+	}
+
+	ret = image_locate_script(buf, size, NULL, NULL, &data, &len);
+	return ret ? -EINVAL : 0;
+}
+
+static int script_raw_read_bootflow(struct udevice *dev, struct bootflow *bflow)
+{
+	struct legacy_img_hdr *hdr;
+	struct disk_partition info;
+	struct blk_desc *desc;
+	lbaint_t count;
+	uint size;
+	void *buf;
+	int ret;
+
+	if (!bflow->blk || !bflow->part)
+		return -ENOENT;
+	desc = dev_get_uclass_plat(bflow->blk);
+	ret = part_get_info(desc, bflow->part, &info);
+	if (ret)
+		return ret;
+	if (strcmp(info.name, CONFIG_BOOTMETH_SCRIPT_RAW_PARTITION))
+		return -ENOENT;
+	bflow->state = BOOTFLOWST_PART;
+
+	if (!info.size || desc->blksz < sizeof(*hdr) ||
+	    desc->blksz > CONFIG_BOOTMETH_SCRIPT_RAW_MAX_SIZE)
+		return -EINVAL;
+	buf = memalign(ARCH_DMA_MINALIGN, desc->blksz);
+	if (!buf)
+		return -ENOMEM;
+	if (blk_dread(desc, info.start, 1, buf) != 1) {
+		ret = -EIO;
+		goto out;
+	}
+
+	hdr = buf;
+	if (IS_ENABLED(CONFIG_LEGACY_IMAGE_FORMAT) &&
+	    genimg_get_format(buf) == IMAGE_FORMAT_LEGACY) {
+		if (!image_check_hcrc(hdr) ||
+		    !image_check_type(hdr, IH_TYPE_SCRIPT)) {
+			ret = -EINVAL;
+			goto out;
+		}
+		size = image_get_data_size(hdr);
+		if (size > CONFIG_BOOTMETH_SCRIPT_RAW_MAX_SIZE - sizeof(*hdr)) {
+			ret = -E2BIG;
+			goto out;
+		}
+		size += sizeof(*hdr);
+	} else if (IS_ENABLED(CONFIG_FIT) && !fdt_check_header(buf)) {
+		size = fdt_totalsize(buf);
+	} else {
+		ret = -ENOEXEC;
+		goto out;
+	}
+	if (size < sizeof(struct fdt_header)) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (size > CONFIG_BOOTMETH_SCRIPT_RAW_MAX_SIZE) {
+		ret = -E2BIG;
+		goto out;
+	}
+	count = DIV_ROUND_UP(size, desc->blksz);
+	if (count > info.size) {
+		ret = -E2BIG;
+		goto out;
+	}
+	free(buf);
+	buf = memalign(ARCH_DMA_MINALIGN, count * desc->blksz + 1);
+	if (!buf)
+		return -ENOMEM;
+	if (blk_dread(desc, info.start, count, buf) != count) {
+		ret = -EIO;
+		goto out;
+	}
+	((char *)buf)[size] = '\0';
+	ret = script_raw_validate(buf, size);
+	if (ret)
+		goto out;
+
+	bflow->fname = strdup(CONFIG_BOOTMETH_SCRIPT_RAW_PARTITION);
+	bflow->subdir = strdup("");
+	if (!bflow->fname || !bflow->subdir) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	if (!bootflow_img_add(bflow, bflow->fname, (enum bootflow_img_t)IH_TYPE_SCRIPT,
+			      map_to_sysmem(buf), size)) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	bflow->buf = buf;
+	bflow->size = size;
+	bflow->state = BOOTFLOWST_READY;
+
+	return 0;
+out:
+	free(buf);
+	return ret;
+}
+
+static int script_raw_bootmeth_bind(struct udevice *dev)
+{
+	struct bootmeth_uc_plat *plat = dev_get_uclass_plat(dev);
+
+	plat->desc = "Script boot from a raw partition";
+	plat->flags = BOOTMETHF_ANY_PART;
+
+	return 0;
+}
+
+static struct bootmeth_ops script_raw_bootmeth_ops = {
+	.check		= script_raw_check,
+	.read_bootflow	= script_raw_read_bootflow,
+	.boot		= bootmeth_script_boot,
+};
+
+static const struct udevice_id script_raw_bootmeth_ids[] = {
+	{ .compatible = "u-boot,script-raw" },
+	{ }
+};
+
+U_BOOT_DRIVER(bootmeth_2script_raw) = {
+	.name		= "bootmeth_script_raw",
+	.id		= UCLASS_BOOTMETH,
+	.of_match	= script_raw_bootmeth_ids,
+	.ops		= &script_raw_bootmeth_ops,
+	.bind		= script_raw_bootmeth_bind,
+};
