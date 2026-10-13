@@ -6,7 +6,11 @@
  * Written by Simon Glass <sjg@chromium.org>
  */
 
+#include <command.h>
+#include <env.h>
 #include <image.h>
+#include <mapmem.h>
+#include <u-boot/crc.h>
 #include <test/ut.h>
 #include <linux/libfdt.h>
 #include "bootstd_common.h"
@@ -100,3 +104,76 @@ static int test_image_phase(struct unit_test_state *uts)
 	return 0;
 }
 BOOTSTD_TEST(test_image_phase, 0);
+
+/* Recompute checksums after changing the legacy length table or payload. */
+static void script_checksums(struct legacy_img_hdr *hdr)
+{
+	image_set_dcrc(hdr, crc32(0, (void *)image_get_data(hdr),
+				  image_get_data_size(hdr)));
+	image_set_hcrc(hdr, 0);
+	image_set_hcrc(hdr, crc32(0, (void *)hdr, sizeof(*hdr)));
+}
+
+/* Bound both known buffers and source's unknown-size images by their header. */
+static int image_legacy_script_bounds(struct unit_test_state *uts)
+{
+	struct {
+		struct legacy_img_hdr hdr;
+		u32 lengths[2];
+		char script[4];
+	} image;
+	struct legacy_img_hdr *hdr = &image.hdr;
+	char *data;
+	uint len;
+	int size, verify;
+
+	if (!IS_ENABLED(CONFIG_LEGACY_IMAGE_FORMAT))
+		return -EAGAIN;
+	for (verify = 0; verify < 2; verify++) {
+		ut_assertok(env_set("verify", verify ? "yes" : "no"));
+		memset(&image, 0, sizeof(image));
+		image_set_magic(hdr, IH_MAGIC);
+		image_set_type(hdr, IH_TYPE_SCRIPT);
+		image_set_size(hdr, sizeof(image) - sizeof(*hdr));
+		image.lengths[0] = cpu_to_uimage(sizeof(image.script));
+		memcpy(image.script, "true", sizeof(image.script));
+		script_checksums(hdr);
+		ut_assertok(image_locate_script(&image, sizeof(image), NULL,
+						NULL, &data, &len));
+		ut_asserteq(sizeof(image.script), len);
+		ut_asserteq_ptr(image.script, data);
+		ut_assertok(cmd_source_script(map_to_sysmem(&image), NULL, NULL));
+
+		/* A known size must bound reads before header/data CRC checks. */
+		for (size = 1; size < sizeof(image); size++)
+			ut_asserteq(1, image_locate_script(&image, size, NULL,
+							   NULL, &data, &len));
+
+		/* Missing terminator: do not walk into the script or beyond it. */
+		memset(image.lengths, 0xff, sizeof(image) - sizeof(*hdr));
+		script_checksums(hdr);
+		ut_asserteq(1, image_locate_script(&image, sizeof(image), NULL,
+						   NULL, &data, &len));
+		ut_asserteq(1, image_locate_script(&image, 0, NULL, NULL,
+						   &data, &len));
+		ut_asserteq(CMD_RET_FAILURE,
+			    cmd_source_script(map_to_sysmem(&image), NULL, NULL));
+
+		/* A terminated table cannot name a script beyond the payload. */
+		image.lengths[0] = cpu_to_uimage(sizeof(image.script) + 1);
+		image.lengths[1] = 0;
+		script_checksums(hdr);
+		ut_asserteq(1, image_locate_script(&image, 0, NULL, NULL,
+						   &data, &len));
+
+		/* Reject a payload too short even for the length and terminator. */
+		image_set_size(hdr, sizeof(u32));
+		script_checksums(hdr);
+		ut_asserteq(1, image_locate_script(&image, 0, NULL, NULL,
+						   &data, &len));
+	}
+
+	return 0;
+}
+
+BOOTSTD_TEST(image_legacy_script_bounds, UTF_DM | UTF_SCAN_FDT);

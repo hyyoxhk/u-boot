@@ -988,15 +988,26 @@ int image_locate_script(void *buf, int size, const char *fit_uname,
 	int noffset;
 	int verify;
 	ulong len;
+	uint remaining;
 	u32 *data;
 
 	verify = env_get_yesno("verify");
+
+	/* Format detection checks the FDT header, not just its magic. */
+	if (size && size < sizeof(struct fdt_header)) {
+		puts("Truncated script image\n");
+		return 1;
+	}
 
 	switch (genimg_get_format(buf)) {
 	case IMAGE_FORMAT_LEGACY:
 		if (!IS_ENABLED(CONFIG_LEGACY_IMAGE_FORMAT)) {
 			goto exit_image_format;
 		} else {
+			if (size && size < sizeof(*hdr)) {
+				puts("Truncated script header\n");
+				return 1;
+			}
 			hdr = buf;
 
 			if (!image_check_magic(hdr)) {
@@ -1006,6 +1017,13 @@ int image_locate_script(void *buf, int size, const char *fit_uname,
 
 			if (!image_check_hcrc(hdr)) {
 				puts("Bad header crc\n");
+				return 1;
+			}
+
+			remaining = image_get_data_size(hdr);
+			if ((size && remaining > size - sizeof(*hdr)) ||
+			    remaining < 2 * sizeof(*data)) {
+				puts("Truncated script data\n");
 				return 1;
 			}
 
@@ -1035,7 +1053,17 @@ int image_locate_script(void *buf, int size, const char *fit_uname,
 			 * component, so seek past the zero-terminated sequence
 			 * of image lengths to get to the actual image data
 			 */
-			while (*data++);
+			do {
+				if (remaining < sizeof(*data)) {
+					puts("Truncated script length table\n");
+					return 1;
+				}
+				remaining -= sizeof(*data);
+			} while (*data++);
+			if (len > remaining) {
+				puts("Truncated script contents\n");
+				return 1;
+			}
 		}
 		break;
 	case IMAGE_FORMAT_FIT:

@@ -840,7 +840,8 @@ static inline void fit_verity_free(struct bootm_headers *images) {}
  * image_locate_script() - Locate the raw script in an image
  *
  * @buf: Address of image
- * @size: Size of image in bytes
+ * @size: Size of image in bytes, or 0 if unknown. Legacy length tables and
+ *	script contents are also bounded by the data size in the image header.
  * @fit_uname: Node name of FIT image to read
  * @confname: Node name of FIT config to read
  * @datap: Returns pointer to raw script on success
