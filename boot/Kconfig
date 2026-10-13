@@ -1009,6 +1009,32 @@ config BOOTMETH_SCRIPT
 	  This provides a way to try out standard boot on an existing boot flow.
 	  It is not enabled by default to save space.
 
+config BOOTMETH_SCRIPT_RAW
+	bool "Boot from a script in a raw partition"
+	depends on BOOTMETH_SCRIPT && BLK && PARTITIONS
+	depends on LEGACY_IMAGE_FORMAT || FIT
+	help
+	  Locate a named partition and read a U-Boot script image directly from
+	  its first block, without a filesystem. This adds the script_raw boot
+	  method. Legacy script images and FIT scripts with embedded data are
+	  supported.
+
+config BOOTMETH_SCRIPT_RAW_PARTITION
+	string "Raw script partition name"
+	depends on BOOTMETH_SCRIPT_RAW
+	default "uboot_scr"
+	help
+	  Partition label to match when scanning for a raw script image.
+
+config BOOTMETH_SCRIPT_RAW_MAX_SIZE
+	hex "Maximum raw script image size"
+	depends on BOOTMETH_SCRIPT_RAW
+	default 0x100000
+	range 0x200 0x1000000
+	help
+	  Maximum script image size in bytes, including its image header.
+	  The image must also fit within the selected partition.
+
 config UPL
 	bool "upl - Universal Payload Specification"
 	imply CMD_UPL

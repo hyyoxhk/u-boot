@@ -221,7 +221,10 @@ static int bootflow_cmd_scan_e(struct unit_test_state *uts)
 {
 	ut_assertok(bootstd_test_drop_bootdev_order(uts));
 
-	ut_assertok(run_command("bootflow scan -aleGH", 0));
+	/* Exercise the filesystem methods without global-method scanning. */
+	ut_assertok(bootmeth_set_order(IS_ENABLED(CONFIG_BOOTMETH_BLS) ?
+		"extlinux efi bls" : "extlinux efi"));
+	ut_assertok(run_command("bootflow scan -aleH", 0));
 	ut_assert_nextline("Scanning for bootflows in all bootdevs");
 	ut_assert_nextline("Seq  Method       State   Uclass    Part  Name                      Filename");
 	ut_assert_nextlinen("---");
@@ -368,6 +371,16 @@ static int bootflow_iter(struct unit_test_state *uts)
 	struct bootflow_iter iter;
 	struct bootflow bflow;
 
+	/* Keep default ordering to exercise runtime global-method filtering. */
+	ut_assertok(bootmeth_set_order(NULL));
+	if (IS_ENABLED(CONFIG_BOOTMETH_SCRIPT_RAW)) {
+		struct udevice *dev;
+
+		ut_assertok(uclass_get_device_by_name(UCLASS_BOOTMETH,
+						      "script_raw", &dev));
+		ut_assertok(device_remove(dev, DM_REMOVE_NORMAL));
+		ut_assertok(device_unbind(dev));
+	}
 	bootstd_clear_glob();
 
 	/* The first device is mmc2.bootdev which has no media */
@@ -516,6 +529,12 @@ static int bootflow_iter_glob(struct unit_test_state *uts)
 	struct bootflow_iter iter;
 	struct bootflow bflow;
 
+	/* Keep the filesystem-method ordering exercised by this test. */
+	ut_assertok(bootmeth_set_order(IS_ENABLED(CONFIG_BOOTMETH_GLOBAL) ?
+		(IS_ENABLED(CONFIG_BOOTMETH_BLS) ? "extlinux efi bls firmware0" :
+		 "extlinux efi firmware0") :
+		(IS_ENABLED(CONFIG_BOOTMETH_BLS) ? "extlinux efi bls" :
+		 "extlinux efi")));
 	bootstd_clear_glob();
 
 	/* we should get the global bootmeth initially */
@@ -596,6 +615,14 @@ static int bootflow_iter_disable(struct unit_test_state *uts)
 	ut_assertok(uclass_first_device_err(UCLASS_BOOTSTD, &bootstd));
 	ut_assertok(device_bind_driver(bootstd, "bootmeth_sandbox", "sandbox",
 				       &dev));
+
+	/* Include the newly bound sandbox method first, as the test expects. */
+	ut_assertok(bootmeth_set_order(IS_ENABLED(CONFIG_BOOTMETH_GLOBAL) ?
+		(IS_ENABLED(CONFIG_BOOTMETH_BLS) ?
+		 "sandbox extlinux efi bls firmware0" :
+		 "sandbox extlinux efi firmware0") :
+		(IS_ENABLED(CONFIG_BOOTMETH_BLS) ? "sandbox extlinux efi bls" :
+		 "sandbox extlinux efi")));
 
 	ut_assertok(bootstd_test_drop_bootdev_order(uts));
 
@@ -1908,4 +1935,57 @@ static int bootdev_hunt_fallthrough(struct unit_test_state *uts)
 }
 BOOTSTD_TEST(bootdev_hunt_fallthrough,
              UTF_DM | UTF_SCAN_FDT | UTF_SF_BOOTDEV | UTF_CONSOLE);
-#endif /* CONFIG_SANDBOX */
+
+/* Exercise valid and rejected images without restarting U-Boot per case. */
+static int bootflow_script_raw(struct unit_test_state *uts)
+{
+	static const int errors[] = {
+		0, 0, -EOPNOTSUPP, -EINVAL, -EINVAL, -E2BIG,
+		-ENOENT, -ENOEXEC, -EINVAL, -E2BIG, -EINVAL, -EINVAL,
+	};
+	struct bootflow_iter iter;
+	struct bootflow bflow;
+	struct bootstd_priv *std;
+	const char *order[2] = {"mmc12", NULL};
+	const char **old_order;
+	int ret, part;
+
+	if (!IS_ENABLED(CONFIG_BOOTMETH_SCRIPT_RAW))
+		return -EAGAIN;
+
+	ut_assertok(prep_mmc_bootdev(uts, "mmc12", false, &old_order));
+	ut_assertok(bootstd_get_priv(&std));
+	std->bootdev_order = order;
+	ut_assertok(bootmeth_set_order("script_raw"));
+	ut_assertok(env_set("verify", "yes"));
+	ret = bootflow_scan_first(NULL, NULL, &iter, BOOTFLOWIF_ALL, &bflow);
+	/* A raw script belongs to a partition, never to the whole disk. */
+	ut_asserteq(-ENOENT, ret);
+	ut_asserteq(0, bflow.part);
+	bootflow_free(&bflow);
+	for (part = 1; part <= ARRAY_SIZE(errors); part++) {
+		ret = bootflow_scan_next(&iter, &bflow);
+		ut_asserteq(part, bflow.part);
+		ut_asserteq(errors[part - 1], ret);
+		if (!ret) {
+			ut_asserteq(BOOTFLOWST_READY, bflow.state);
+			ut_asserteq_str("uboot_scr", bflow.fname);
+			/* A script returning successfully did not boot an OS. */
+			ut_asserteq(-EFAULT, bootflow_run_boot(&iter, &bflow));
+			ut_assert_skip_to_line("%sraw-script-ok mmc c %d",
+					       part == 2 ? "sha256+ " : "", part);
+			ut_asserteq_str("mmc", env_get("devtype"));
+		} else {
+			ut_assert(bflow.state < BOOTFLOWST_READY);
+			ut_assertnull(bflow.buf);
+		}
+		bootflow_free(&bflow);
+	}
+	bootflow_iter_uninit(&iter);
+	std->bootdev_order = old_order;
+
+	return 0;
+}
+
+BOOTSTD_TEST(bootflow_script_raw, UTF_DM | UTF_SCAN_FDT | UTF_CONSOLE);
+#endif

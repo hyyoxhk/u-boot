@@ -16,6 +16,7 @@ import re
 import pytest
 
 import utils
+from img.script_raw import setup_script_raw_image
 # pylint: disable=E0611
 from tests import fs_helper
 from fs_helper import DiskHelper, FsHelper
@@ -758,6 +759,14 @@ def test_ut_dm_init_bootstd(ubman):
 
     # Restart so that the new mmc1.img is picked up
     ubman.restart_uboot()
+
+
+@pytest.mark.boardspec('sandbox')
+@pytest.mark.buildconfigspec('bootmeth_script_raw')
+@pytest.mark.requiredtool('sgdisk')
+def test_ut_dm_init_script_raw(ubman):
+    """Prepare the disk used by the raw script C bootflow test."""
+    setup_script_raw_image(ubman)
 
 
 @pytest.fixture(name="ut_ubman")

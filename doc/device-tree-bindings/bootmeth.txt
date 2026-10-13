@@ -11,6 +11,7 @@ compatible:
    "u-boot,extlinux-pxe" - distro boot from a network device
    "u-boot,distro-efi" - EFI boot from an .efi file
    "u-boot,efi-bootmgr" - EFI boot using boot manager (bootmgr)
+   "u-boot,script-raw" - script boot from a named raw partition
 
 
 Example:
