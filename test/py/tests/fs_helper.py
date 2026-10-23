@@ -8,7 +8,7 @@
 import re
 import os
 import shutil
-from subprocess import call, check_call, check_output, CalledProcessError
+from subprocess import call, check_call, check_output, CalledProcessError, run
 from subprocess import DEVNULL
 import tempfile
 
@@ -262,8 +262,8 @@ def mk_fs(config, fs_type, size, prefix, src_dir=None, fs_img=None, quiet=False)
         raise
 
 def setup_image(ubman, devnum, part_type, img_size=20, second_part=False,
-                basename='mmc'):
-    """Create a disk image with one or two partitions
+                basename='mmc', part_spec=None):
+    """Create a disk image with default or caller-specified partitions
 
     Args:
         ubman (ConsoleBase): Console to use
@@ -272,6 +272,8 @@ def setup_image(ubman, devnum, part_type, img_size=20, second_part=False,
         img_size (int): Image size in MiB
         second_part (bool): True to contain a small second partition
         basename (str): Base name to use in the filename, e.g. 'mmc'
+        part_spec (str): Optional sfdisk partition specification, overriding
+            part_type and second_part
 
     Returns:
         tuple:
@@ -281,14 +283,17 @@ def setup_image(ubman, devnum, part_type, img_size=20, second_part=False,
     fname = os.path.join(ubman.config.source_dir, f'{basename}{devnum}.img')
     mnt = os.path.join(ubman.config.persistent_data_dir, 'scratch')
 
-    spec = f'type={part_type:x}, size={img_size - 2}M, start=1M, bootable'
-    if second_part:
-        spec += '\ntype=c'
+    spec = part_spec
+    if spec is None:
+        spec = f'type={part_type:x}, size={img_size - 2}M, start=1M, bootable'
+        if second_part:
+            spec += '\ntype=c'
 
     try:
         check_call(f'mkdir -p {mnt}', shell=True)
         check_call(f'qemu-img create {fname} {img_size}M', shell=True)
-        check_call(f'printf "{spec}" | sfdisk {fname}', shell=True)
+        # Pass the specification directly, including quoted GPT names.
+        run(['sfdisk', fname], input=spec.encode(), check=True)
     except CalledProcessError:
         call(f'rm -f {fname}', shell=True)
         raise
