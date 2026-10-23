@@ -978,6 +978,46 @@ static const char *get_default_image(const void *fit)
 	return fdt_getprop(fit, images_noffset, FIT_DEFAULT_PROP, NULL);
 }
 
+/* Check that [data, data + len) lies within [buf, buf + size) */
+static bool fit_data_in_buf(const void *buf, int size, const void *data,
+			    size_t len)
+{
+	ulong off;
+
+	if ((ulong)data < (ulong)buf)
+		return false;
+	off = (ulong)data - (ulong)buf;
+
+	return off <= (uint)size && len <= (uint)size - off;
+}
+
+/*
+ * Check that the data of every FIT subimage lies within the known-size
+ * buffer. Images with in-buffer external data (e.g. 'mkimage -E') are fine.
+ */
+static int fit_check_data_bounds(const void *fit, const void *buf, int size)
+{
+	const void *data;
+	size_t len;
+	int images, node;
+
+	images = fdt_path_offset(fit, FIT_IMAGES_PATH);
+	if (images < 0)
+		return -ENOENT;
+
+	fdt_for_each_subnode(node, fit, images) {
+		if (fit_image_get_data(fit, node, &data, &len))
+			continue;	/* no data; checked later if selected */
+		if (!fit_data_in_buf(buf, size, data, len)) {
+			printf("FIT image '%s' data is outside the image\n",
+			       fit_get_name(fit, node, NULL));
+			return -EFBIG;
+		}
+	}
+
+	return 0;
+}
+
 int image_locate_script(void *buf, int size, const char *fit_uname,
 			const char *confname, char **datap, uint *lenp)
 {
@@ -1043,10 +1083,25 @@ int image_locate_script(void *buf, int size, const char *fit_uname,
 			goto exit_image_format;
 		} else {
 			fit_hdr = buf;
-			if (fit_check_format(fit_hdr, IMAGE_SIZE_INVAL)) {
+
+			/* Known size: make sure the FDT itself fits in the buffer,
+			 * even when FIT_FULL_CHECK is disabled
+			 */
+			if (size && ((uint)size < sizeof(struct fdt_header) ||
+				     fdt_totalsize(fit_hdr) > (uint)size)) {
 				puts("Bad FIT image format\n");
 				return 1;
 			}
+
+			if (fit_check_format(fit_hdr,
+					     size ? size : IMAGE_SIZE_INVAL)) {
+				puts("Bad FIT image format\n");
+				return 1;
+			}
+
+			/* Do this before any verification reads image data */
+			if (size && fit_check_data_bounds(fit_hdr, buf, size))
+				return 1;
 
 			if (!fit_uname) {
 				/* If confname is empty, use the default */
