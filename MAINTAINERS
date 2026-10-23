@@ -846,6 +846,7 @@ F:	include/bootflow.h
 F:	include/bootmeth.h
 F:	include/bootstd.h
 F:	test/boot/
+F:	test/py/img/script_raw.py
 
 BOOTMETH_ANDROID
 M:	Mattijs Korpershoek <mkorpershoek@kernel.org>
