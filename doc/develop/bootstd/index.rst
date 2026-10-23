@@ -15,4 +15,5 @@ Standard Boot
    cros
    rauc
    script
+   script_raw
    sandbox
