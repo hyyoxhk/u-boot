@@ -35,6 +35,7 @@ extern U_BOOT_DRIVER(bootmeth_android);
 extern U_BOOT_DRIVER(bootmeth_cros);
 extern U_BOOT_DRIVER(bootmeth_rauc);
 extern U_BOOT_DRIVER(bootmeth_2script);
+extern U_BOOT_DRIVER(bootmeth_2script_raw);
 
 /* Use this as the vendor for EFI to tell the app to exit boot services */
 static u16 __efi_runtime_data test_vendor[] = u"U-Boot testing";
@@ -1908,4 +1909,101 @@ static int bootdev_hunt_fallthrough(struct unit_test_state *uts)
 }
 BOOTSTD_TEST(bootdev_hunt_fallthrough,
              UTF_DM | UTF_SCAN_FDT | UTF_SF_BOOTDEV | UTF_CONSOLE);
+
+/* Exercise valid and rejected images without restarting U-Boot per case. */
+static int check_script_raw(struct unit_test_state *uts,
+			    struct bootflow_iter *iter)
+{
+	static const struct {
+		int err;
+		const char *msg;
+	} cases[] = {
+		/* Keep in sync with CASES in test/py/img/script_raw.py. */
+		{ 0, NULL },	/* legacy */
+		{ 0, NULL },	/* fit */
+		{ -EINVAL, "FIT image 'script' data is outside the image" },	/* external */
+		{ -EINVAL, "Bad data crc" },	/* bad_crc */
+		{ -E2BIG, NULL },	/* too_large */
+		{ -ENOENT, NULL },	/* wrong_name */
+		{ -ENOEXEC, NULL },	/* empty */
+		{ -EINVAL, NULL },	/* bad_header */
+		{ -E2BIG, NULL },	/* partition_size */
+		{ -EINVAL, "Bad FIT image format" },	/* bad_fit */
+	};
+	struct bootflow bflow;
+	int ret, part;
+
+	ret = bootflow_scan_first(NULL, NULL, iter, BOOTFLOWIF_ALL, &bflow);
+	/* A raw script belongs to a partition, never to the whole disk. */
+	ut_asserteq(-ENOENT, ret);
+	ut_asserteq(0, bflow.part);
+	bootflow_free(&bflow);
+	for (part = 1; part <= ARRAY_SIZE(cases); part++) {
+		ret = bootflow_scan_next(iter, &bflow);
+		ut_asserteq(part, bflow.part);
+		ut_asserteq(cases[part - 1].err, ret);
+		if (cases[part - 1].msg)
+			ut_assert_skip_to_line("%s", cases[part - 1].msg);
+		if (!ret) {
+			ut_asserteq(BOOTFLOWST_READY, bflow.state);
+			ut_asserteq_str("uboot_scr", bflow.fname);
+			/* A script returning successfully did not boot an OS. */
+			ut_asserteq(-EFAULT, bootflow_run_boot(iter, &bflow));
+			ut_assert_skip_to_line("%sraw-script-ok mmc c %d",
+					       part == 2 ? "sha256+ " : "", part);
+			ut_asserteq_str("mmc", env_get("devtype"));
+		} else {
+			ut_assert(bflow.state < BOOTFLOWST_READY);
+			ut_assertnull(bflow.buf);
+		}
+		bootflow_free(&bflow);
+	}
+
+	/* The scanner also visits unused partition slots. */
+	for (; part < iter->max_part; part++) {
+		ut_asserteq(-ENOENT, bootflow_scan_next(iter, &bflow));
+		ut_asserteq(part, bflow.part);
+		bootflow_free(&bflow);
+	}
+	ut_asserteq(-ENODEV, bootflow_scan_next(iter, &bflow));
+
+	return 0;
+}
+
+static int bootflow_script_raw(struct unit_test_state *uts)
+{
+	static const char *order[] = {"mmc12", NULL};
+	struct bootflow_iter iter;
+	struct bootstd_priv *std;
+	struct udevice *bootstd;
+	const char **old_order;
+	ofnode node;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_BOOTMETH_SCRIPT_RAW))
+		return -EAGAIN;
+
+	/* Bind only for this test, leaving the default bootmeth list intact. */
+	ut_assertok(uclass_first_device_err(UCLASS_BOOTSTD, &bootstd));
+	ut_assertok(device_bind(bootstd, DM_DRIVER_REF(bootmeth_2script_raw),
+				"script_raw", 0, ofnode_null(), NULL));
+
+	node = ofnode_find_subnode(oftree_root(oftree_default()), "mmc12");
+	ut_assert(ofnode_valid(node));
+	ut_assertok(lists_bind_fdt(gd->dm_root, node, NULL, NULL, false));
+	ut_assertok(bootstd_get_priv(&std));
+	old_order = std->bootdev_order;
+	std->bootdev_order = order;
+	ut_assertok(bootmeth_set_order("script_raw"));
+	ut_assertok(env_set("verify", "yes"));
+	ret = check_script_raw(uts, &iter);
+	bootflow_iter_uninit(&iter);
+	std->bootdev_order = old_order;
+	/* Restore verify even if a scan or boot assertion failed. */
+	ut_assertok(env_set("verify", NULL));
+	ut_assertok(ret);
+
+	return 0;
+}
+BOOTSTD_TEST(bootflow_script_raw, UTF_DM | UTF_SCAN_FDT | UTF_CONSOLE);
 #endif /* CONFIG_SANDBOX */

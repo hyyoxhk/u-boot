@@ -16,6 +16,7 @@ import re
 import pytest
 
 import utils
+from img.script_raw import setup_script_raw_image
 # pylint: disable=E0611
 from tests import fs_helper
 from fs_helper import DiskHelper, FsHelper
@@ -755,6 +756,8 @@ def test_ut_dm_init_bootstd(ubman):
     setup_efi_image(ubman)
     setup_rauc_image(ubman)
     setup_bls_prefix_image(ubman)
+    if ubman.config.buildconfig.get('config_bootmeth_script_raw') == 'y':
+        setup_script_raw_image(ubman)
 
     # Restart so that the new mmc1.img is picked up
     ubman.restart_uboot()
