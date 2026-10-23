@@ -1043,9 +1043,26 @@ int image_locate_script(void *buf, int size, const char *fit_uname,
 			goto exit_image_format;
 		} else {
 			fit_hdr = buf;
-			if (fit_check_format(fit_hdr, IMAGE_SIZE_INVAL)) {
+			if (fit_check_format(fit_hdr,
+					     size ? size : IMAGE_SIZE_INVAL)) {
 				puts("Bad FIT image format\n");
 				return 1;
+			}
+
+			if (size) {
+				int images, node;
+
+				/* Reject external data before any verification reads. */
+				images = fdt_path_offset(fit_hdr, FIT_IMAGES_PATH);
+				fdt_for_each_subnode(node, fit_hdr, images) {
+					if (fdt_getprop(fit_hdr, node,
+							FIT_DATA_OFFSET_PROP, NULL) ||
+					    fdt_getprop(fit_hdr, node,
+							FIT_DATA_POSITION_PROP, NULL)) {
+						puts("External FIT script data is not supported\n");
+						return 1;
+					}
+				}
 			}
 
 			if (!fit_uname) {
