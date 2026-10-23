@@ -188,7 +188,7 @@ static int script_set_bootflow(struct udevice *dev, struct bootflow *bflow,
 	return 0;
 }
 
-static int script_boot(struct udevice *dev, struct bootflow *bflow)
+int bootmeth_script_boot(struct udevice *dev, struct bootflow *bflow)
 {
 	struct blk_desc *desc;
 	ulong addr;
@@ -258,7 +258,7 @@ static struct bootmeth_ops script_bootmeth_ops = {
 	.read_bootflow	= script_read_bootflow,
 	.set_bootflow	= script_set_bootflow,
 	.read_file	= bootmeth_common_read_file,
-	.boot		= script_boot,
+	.boot		= bootmeth_script_boot,
 };
 
 static const struct udevice_id script_bootmeth_ids[] = {
